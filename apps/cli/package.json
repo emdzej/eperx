@@ -1,0 +1,27 @@
+{
+  "name": "@eperx/cli",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ePER disc tooling: inspect the databases, build a static tree the browser can read",
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "type": "module",
+  "bin": {
+    "eperx": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist .turbo *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@commander-js/extra-typings": "^15.0.0",
+    "@eperx/core": "workspace:*",
+    "@eperx/res": "workspace:*",
+    "chalk": "^6.0.0",
+    "commander": "^15.0.0",
+    "mdb-reader": "^3.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.1"
+  }
+}

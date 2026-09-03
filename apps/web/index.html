@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>eperx</title>
+    <meta
+      name="description"
+      content="Browser client for the ePER Fiat group parts catalogue. Reads the original data client-side; no backend."
+    />
+    <script>
+      // Apply persisted theme before mount so the first paint matches.
+      // Default is LIGHT — the Italian flag off-white (#F4F5F0) sits as the
+      // page background and the green/red accents pop against it. Dark mode
+      // is opt-in via the header toggle.
+      try {
+        const t = localStorage.getItem("eperx.theme") ?? "light";
+        if (t === "dark") document.documentElement.classList.add("dark");
+      } catch {}
+    </script>
+  </head>
+  <body class="bg-base text-foreground antialiased">
+    <div id="app" class="h-screen w-screen overflow-hidden"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

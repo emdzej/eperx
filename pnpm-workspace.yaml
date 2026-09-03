@@ -1,0 +1,8 @@
+packages:
+  - "packages/*"
+  - "apps/*"
+
+# vitest depends on esbuild, whose postinstall installs the platform binary.
+# Without this pnpm skips it and vitest fails at startup.
+onlyBuiltDependencies:
+  - "esbuild"

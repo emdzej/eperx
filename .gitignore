@@ -1,0 +1,10 @@
+re/extract/
+re/decompiled/
+re/jadx.log
+data/
+node_modules/
+dist/
+build/
+.turbo/
+*.log
+*.tsbuildinfo
