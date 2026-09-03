@@ -269,13 +269,17 @@ is measured server-side by the dev middleware — set `EPERX_TRACE=1`, or read
 
 Honest list, so nobody reports these as discoveries.
 
-- **No parts-by-vehicle view.** The `PATTERN` grammar is specified, tested and
-  validated by reachability (18 of 81,415 drawings unreachable), but the UI has
-  no vehicle picker, so nothing filters yet. Three things about the grammar
-  remain open and all are written down in
+- **Applicability is reconstructed and unverified against real vehicles.** The
+  grammar is specified, tested and validated by reachability, and the UI
+  filters by version — but three things about it remain open and all are
+  written down in
   [`docs/data-format.md` §5](docs/data-format.md#what-is-still-open): `?`, the
   precedence of `!` against an implicit AND, and how several matching
-  alternatives on one callout are resolved.
+  alternatives on one callout are resolved. The browser also closes the world
+  per criteria type, which is an inference that raises the unreachable count
+  from 18 to 209; it says so on screen.
+- **No VIN lookup.** A VIN's type code can route to a shortlist of catalogues
+  from `SP.DB` alone, but a chassis number needs the F3 reader.
 - **No F3 reader**, so no VIN search. Header parses by eye only.
 - **`HOTSPOTS` is null on every row inspected**, so callouts are not clickable.
   openPER has the same gap.

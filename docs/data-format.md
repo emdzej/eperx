@@ -208,10 +208,47 @@ A custom blocked, indexed store. Not yet implemented in eperx.
 
 The header opens with the ASCII magic `F3`, then table and column names in
 fixed-width ASCII fields, then bzip2-compressed data blocks (`BZh91AY&SY`).
-`SP.CH` declares tables `CHASSIS`, `MODEL`, `CHASSY`, `VIN`, `MVS`,
-`ORGANIZATION`, `MOTOR`, `DATE`, `INT_*`; `SP.TR` declares `TA` with
-`MODELLO`, `TELAIO`, `MATRICOLA`, `PART`; `SP.RTCHRY` declares `VINCHRYSLER`
-with `VIN`, `BUILDDATE`, `PATTERN`.
+Read out of the headers:
+
+| File        | Fields                                                                                                                                                                                                                         |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `SP.CH`     | `CHASSIS`, `MODEL`, `CHASSY`, `VIN`, `MVS`, `ORGANIZATION`, `MOTOR`, `DATE`, `INT_COLOR`                                                                                                                                       |
+| `SP.RT`     | table `RTM`: `MOD_TEL`, `VIN`, `CIS`, `TELAIO`, `ORDINE`, `MARCA`, `MODELLO`, `VERSIONE`, `SERIE`, `GUIDA`, `ALLESTMERC`, `COLINT`, `COLEST`, `MERCDEST`, `CODALLSPEC`, `CODOPT`, `CODSPECSC`, `CODGOMM`, `MODCODEP`, `CARATT` |
+| `SP.TR`     | table `TA`: `MODELLO`, `TELAIO`, `MATRICOLA`, `PART`                                                                                                                                                                           |
+| `SP.RTCHRY` | table `VINCHRYSLER`: `VIN`, `BUILDDATE`, `PATTERN`                                                                                                                                                                             |
+
+**`SP.RT` is the per-vehicle build record**, not an ordering file as an earlier
+draft of this document guessed. The Italian names give it away — `TELAIO` is
+the chassis number, `GUIDA` the steering side, `COLINT`/`COLEST` the interior
+and exterior colours, `MERCDEST` the destination market — and the two that
+matter most are **`CODOPT`, the options actually fitted, and `CARATT`, the
+vehicle's characteristics**. Those are criteria codes: the specification of one
+individual car rather than of a sold version.
+
+### Looking a vehicle up
+
+There are two routes, and only one of them needs this format.
+
+**By VIN type code, available from the Access data alone.** `SP.DB`'s `VIN`
+table maps a three-character code to a model — 132 rows, 73 distinct codes —
+and a Fiat-group VIN carries that code at positions 4–6, so `ZFA312…` gives
+`312`. It is a _router_, not a decoder: `312` reaches three models and six
+catalogues (Nuova Panda, Nuova 500 and its Abarth, 500 MY2012 and its Abarth,
+New Ypsilon), and across all codes it narrows to 3.4 catalogues on average and
+as many as 15.
+
+**By chassis number, which needs the F3 reader.** openPER's
+`Release84VinSearch` shows the key construction: `SP.CH` is looked up with
+`MODEL || chassis.padStart(8, "0")` and yields that chassis's `MVS` — the exact
+sold version — with its VIN, engine, build date and interior colour. `SP.RT` is
+then looked up with `MODEL || chassis.padStart(7, "0")` for the build record
+above.
+
+That second route matters for applicability: `CARATT` and `CODOPT` would give a
+specification for _this car_ rather than for its version, which removes the
+closed-world inference in [§5](#5-the-pattern-grammar) entirely. openPER notes
+that roughly 25% of vehicles have such a record; the rest fall back to the
+version.
 
 openPER's `VinSearcher/KtdReader` reads this format and is **MIT**, so its
 layout knowledge can be used here with attribution — see
@@ -433,9 +470,10 @@ Honest list, so nobody reports these as discoveries.
 
 - **`SP.PL` — price lists.** Format unexamined. Out of scope by decision
   (see [`plan.md`](plan.md)), so it is described, not built.
-- **`SP.CH` / `SP.TR` / `SP.RT` bodies.** The F3 header parses by eye; the
-  block index and row layout are not implemented. `SP.RT`'s purpose is
-  unknown — its tables (`RTM`, `MOD_TEL`, `CIS`, `ORDINE`) suggest ordering.
+- **`SP.CH` / `SP.TR` / `SP.RT` bodies.** The F3 header parses by eye and the
+  field lists are read; the block index and row layout are not implemented, so
+  there is no chassis lookup. What each file holds is now known — see
+  [§4](#4-spch-sptr-sprt--the-f3-format).
 - **`?` in patterns**, and the precedence of `!` against an implicit AND —
   both in [§5](#what-is-still-open), which also records how several matching
   alternatives on one callout are probably resolved (`TBD_SEQ` order) and why

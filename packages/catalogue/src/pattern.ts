@@ -383,3 +383,67 @@ export function criteriaIn(pattern: Pattern): Criterion[] {
   walk(pattern);
   return out;
 }
+
+/**
+ * Add the criteria a specification implies are absent.
+ *
+ * An `MVS` pattern states what a version has and negates the *equipment* it
+ * lacks, but it does not negate the alternatives of a valued characteristic:
+ * a 1.3 diesel lists `CC1.3` and `CMBDS` and says nothing about `CC1.2`. So
+ * a drawing for the 1.2 petrol evaluates to `Unknown` rather than `False`,
+ * and almost every inapplicable drawing reads as "cannot tell".
+ *
+ * That is fixable because valued criteria types are single-valued: a vehicle
+ * has one displacement and one fuel. Measured over all **36,332**
+ * specifications, **36,331 (99.997%)** give every valued type exactly one
+ * value; the single exception lists two values for `L` (trim level), and 39 of
+ * the 40 types are never multi-valued at all.
+ *
+ * So for each present `(type, code)`, every *other* code of that type in the
+ * catalogue's vocabulary is added to `absent`.
+ *
+ * Bare equipment codes — a `VMK_TYPE` with no `VMK_COD` — are deliberately
+ * left alone. Those are presence flags, each its own type, and the pattern
+ * already negates the ones that are absent. Closing over them would assert
+ * that everything unmentioned is missing, which is a different and much
+ * stronger claim.
+ *
+ * **This is an inference, and it has a measured cost.** Under the open
+ * reading, 18 of 81,415 drawings are unreachable; closing the world takes
+ * that to **209**, an eleven-fold rise in the one number that indicates the
+ * grammar is being read wrongly. It also makes 338 fewer drawings undecided
+ * and 147 more decisively applicable.
+ *
+ * Which reading is right is not settled. The 191 drawings that change verdict
+ * blame no single type — `M` (141), `CC` (80), `CMB` (63), `KW` (42) — and
+ * `CC` and `CMB` are displacement and fuel, about as clearly single-valued as
+ * a criterion gets. So they are most likely diagrams prepared for
+ * configurations that were never sold in that catalogue, which the open
+ * reading simply cannot rule out. But "most likely" is not "shown".
+ *
+ * Hence: `eperx applicability` defaults to the **open** reading, so that the
+ * conservative number stays the headline regression metric, and takes
+ * `--close` to measure this one. The browser uses the closed reading, because
+ * without it almost every inapplicable drawing reads "cannot tell" and the
+ * filter is useless — and it says on screen which reading it is using.
+ */
+export function closeSpecification(spec: Specification, vocabulary: Vocabulary): Specification {
+  const byType = new Map<string, string>();
+  for (const token of spec.present) {
+    const { type, code } = resolveCriterion(token, vocabulary);
+    if (type === undefined || code === undefined || code === "") continue;
+    byType.set(type, code);
+  }
+  if (byType.size === 0) return spec;
+
+  const absent = new Set(spec.absent);
+  for (const key of vocabulary) {
+    const space = key.lastIndexOf(" ");
+    const type = key.slice(0, space);
+    const code = key.slice(space + 1);
+    if (code === "") continue;
+    const chosen = byType.get(type);
+    if (chosen !== undefined && chosen !== code) absent.add(`${type}${code}`);
+  }
+  return { present: spec.present, absent };
+}

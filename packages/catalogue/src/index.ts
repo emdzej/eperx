@@ -30,6 +30,7 @@ export {
 } from "./parts.js";
 export { languages, type Language } from "./meta.js";
 export {
+  closeSpecification,
   criteriaIn,
   evaluatePattern,
   formatPattern,
@@ -45,3 +46,11 @@ export {
   type Specification,
   type Vocabulary,
 } from "./pattern.js";
+export {
+  criteriaMeanings,
+  criteriaVocabulary,
+  specificationOf,
+  versions,
+  type CriterionMeaning,
+  type Version,
+} from "./vehicle.js";

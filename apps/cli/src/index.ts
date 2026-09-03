@@ -327,11 +327,19 @@ program
   .description("check the PATTERN grammar against the disc's own consistency")
   .requiredOption("-d, --data <dir>", "an imported tree")
   .option("-c, --catalogue <cod>", "one catalogue, e.g. 33 (default: all 223)")
+  .option(
+    "--close",
+    "assume valued criteria types are single-valued, so choosing one value " +
+      "excludes the others (see closeSpecification)",
+  )
   .action((options) => {
     const db = new DatabaseSync(join(options.data, CATALOGUE_DB), { readOnly: true });
     const started = Date.now();
     try {
-      const r = checkApplicability(db, { catalogue: options.catalogue });
+      const r = checkApplicability(db, {
+        catalogue: options.catalogue,
+        close: options.close,
+      });
       const pct = (n: number, of: number) => (of ? `${((n / of) * 100).toFixed(2)}%` : "—");
 
       console.log(chalk.bold(`\n${r.catalogues} catalogue${r.catalogues === 1 ? "" : "s"}`));

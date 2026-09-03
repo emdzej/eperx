@@ -1,4 +1,5 @@
 import {
+  closeSpecification,
   evaluatePattern,
   parsePattern,
   PatternError,
@@ -96,7 +97,7 @@ function loadVocabulary(db: Database, catalogue: string): Set<string> {
 
 export function checkApplicability(
   db: Database,
-  options: { catalogue?: string; maxErrors?: number } = {},
+  options: { catalogue?: string; maxErrors?: number; close?: boolean } = {},
 ): ApplicabilityReport {
   const report: ApplicabilityReport = {
     catalogues: 0,
@@ -135,7 +136,7 @@ export function checkApplicability(
 
   for (const catalogue of catalogues) {
     report.catalogues++;
-    loadVocabulary(db, catalogue); // resolved for its own sake; evaluation is by token
+    const vocabulary = loadVocabulary(db, catalogue);
 
     const versions: Version[] = [];
     const mvs = db
@@ -148,7 +149,8 @@ export function checkApplicability(
       try {
         const { present, absent, ignored } = specificationFrom(parsePattern(row.p));
         if (ignored) report.versionsWithDisjunction++;
-        versions.push({ spec: { present, absent } });
+        const spec = { present, absent };
+        versions.push({ spec: options.close ? closeSpecification(spec, vocabulary) : spec });
         report.versionsParsed++;
       } catch (error) {
         note(row.p, error);

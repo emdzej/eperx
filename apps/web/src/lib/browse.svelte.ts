@@ -1,6 +1,16 @@
 import {
   callouts,
   catalogues,
+  closeSpecification,
+  criteriaIn,
+  criteriaMeanings,
+  criteriaVocabulary,
+  evaluatePattern,
+  parsePattern,
+  resolvePattern,
+  specificationOf,
+  Truth,
+  versions,
   drawings,
   groups,
   imageLocation,
@@ -16,8 +26,11 @@ import {
   type Make,
   type ModelGroup,
   type Part,
+  type CriterionMeaning,
+  type Specification,
   type Subgroup,
   type Usage,
+  type Version,
 } from "@eperx/catalogue";
 import { HttpSource } from "./http-source";
 import { tree } from "./tree.svelte";
@@ -48,6 +61,17 @@ export const browse = $state({
   imageUrl: undefined as string | undefined,
   /** Bytes of the PNG itself, kept apart from the database's page traffic. */
   imageBytes: 0,
+
+  // The chosen vehicle version, and what it implies.
+  versions: [] as Version[],
+  versionSearch: "" as string,
+  version: undefined as Version | undefined,
+  /** Truth per drawing, keyed as table/variant/revision. */
+  fit: new Map<string, string>(),
+  /** Truth per callout, keyed as reference/sequence/part. */
+  calloutFit: new Map<string, string>(),
+  /** Hide what definitely does not fit the chosen version. */
+  hideUnfit: true,
 
   search: "" as string,
   parts: [] as Part[],
@@ -127,7 +151,15 @@ export async function selectCatalogue(entry: CatalogueEntry): Promise<void> {
       callouts: [],
     });
     clearDrawing();
-    browse.groups = await groups(tree.catalogue!, entry.code);
+    browse.version = undefined;
+    browse.versions = [];
+    browse.versionSearch = "";
+    browse.fit = new Map();
+    browse.calloutFit = new Map();
+    await loadCriteria(entry.code);
+    await selectVersion(undefined);
+    const [loaded] = await Promise.all([groups(tree.catalogue!, entry.code), searchVersions("")]);
+    browse.groups = loaded;
   });
 }
 
@@ -151,6 +183,7 @@ export async function selectSubgroup(subgroup: Subgroup): Promise<void> {
       browse.group!.code,
       subgroup.code,
     );
+    scoreDrawings();
     const first = browse.drawings[0];
     if (first) await showDrawing(first);
   });
@@ -161,6 +194,7 @@ export async function showDrawing(drawing: Drawing): Promise<void> {
   await run(async () => {
     browse.drawing = drawing;
     browse.callouts = await callouts(tree.catalogue!, drawing);
+    scoreCallouts();
     await loadImage(drawing);
   });
 }
@@ -243,3 +277,112 @@ export async function openUsage(usage: Usage): Promise<void> {
     await showDrawing(match);
   });
 }
+
+/** Key a drawing for the fit map. */
+export function drawingKey(drawing: Drawing): string {
+  return `${drawing.table}/${drawing.variant}/${drawing.revision}`;
+}
+
+/** Key a callout for the fit map. */
+export function calloutKey(item: Callout): string {
+  return `${item.reference}/${item.sequence}/${item.part}`;
+}
+
+/**
+ * Tokenisation vocabulary and criteria descriptions for the open catalogue.
+ *
+ * Held outside the rune state: they are per-catalogue lookup tables of a few
+ * thousand entries, and making them reactive would mean Svelte proxying every
+ * Map access on a hot path.
+ */
+let vocabulary: Set<string> = new Set();
+let meanings: Map<string, CriterionMeaning> = new Map();
+let specification: Specification | undefined;
+
+/** What a pattern says, in words, for display beside the expression. */
+export function explainPattern(pattern: string | null): string {
+  if (!pattern) return "";
+  try {
+    const resolved = resolvePattern(parsePattern(pattern), vocabulary);
+    const parts = criteriaIn(resolved).map((criterion) => {
+      const meaning = meanings.get(criterion.token);
+      if (!meaning) return criterion.token;
+      return [meaning.typeName, meaning.codeName].filter(Boolean).join(" ") || criterion.token;
+    });
+    return [...new Set(parts)].join(" · ");
+  } catch {
+    // A malformed pattern is shown as-is rather than explained. 39 of the
+    // corpus's 107,957 are malformed and repairing them is not this code's job.
+    return "";
+  }
+}
+
+async function loadCriteria(catalogue: string): Promise<void> {
+  if (!tree.catalogue) return;
+  [vocabulary, meanings] = await Promise.all([
+    criteriaVocabulary(tree.catalogue, catalogue),
+    criteriaMeanings(tree.catalogue, catalogue),
+  ]);
+}
+
+export async function searchVersions(query: string): Promise<void> {
+  if (!tree.catalogue || !browse.catalogue) return;
+  await run(async () => {
+    browse.versionSearch = query;
+    browse.versions = await versions(tree.catalogue!, browse.catalogue!.code, {
+      search: query,
+      limit: 200,
+    });
+  });
+}
+
+/**
+ * Choose a vehicle version, and score everything on screen against it.
+ *
+ * The specification is closed per criteria type — see `closeSpecification`.
+ * Without that, a drawing for the 1.2 petrol evaluates to "unknown" rather
+ * than "does not fit" against a 1.3 diesel, and nothing useful can be hidden.
+ */
+export async function selectVersion(version: Version | undefined): Promise<void> {
+  await run(async () => {
+    browse.version = version;
+    specification = version && specificationOf(version);
+    if (specification) specification = closeSpecification(specification, vocabulary);
+    scoreDrawings();
+    scoreCallouts();
+
+    // The drawing on screen may be one this version cannot have. Leaving it
+    // there shows a diagram flagged "does not fit" beside a variant list that
+    // no longer offers it, which reads as a bug and is one.
+    if (browse.drawing && browse.fit.get(drawingKey(browse.drawing)) === Truth.False) {
+      const replacement = browse.drawings.find(
+        (candidate) => browse.fit.get(drawingKey(candidate)) !== Truth.False,
+      );
+      if (replacement) await showDrawing(replacement);
+    }
+  });
+}
+
+function score(pattern: string | null): string {
+  if (!specification) return Truth.Unknown;
+  if (!pattern) return Truth.True; // no pattern constrains nothing
+  try {
+    return evaluatePattern(parsePattern(pattern), specification);
+  } catch {
+    return Truth.Unknown;
+  }
+}
+
+function scoreDrawings(): void {
+  const fit = new Map<string, string>();
+  for (const drawing of browse.drawings) fit.set(drawingKey(drawing), score(drawing.pattern));
+  browse.fit = fit;
+}
+
+function scoreCallouts(): void {
+  const fit = new Map<string, string>();
+  for (const item of browse.callouts) fit.set(calloutKey(item), score(item.formula));
+  browse.calloutFit = fit;
+}
+
+export { scoreCallouts, scoreDrawings };

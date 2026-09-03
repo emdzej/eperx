@@ -149,9 +149,20 @@ inferred rather than confirmed.
 UI has no vehicle picker, so nothing filters yet — patterns are shown verbatim
 and marked uninterpreted.
 
-**4. VIN.** The F3 format in `SP.CH`, so a VIN resolves to a factory
-specification instead of a generic model. openPER's MIT `KtdReader` documents
-the layout.
+**4. VIN.** Two routes, and the cheap one is already possible.
+
+`SP.DB`'s `VIN` table maps a VIN's three-character type code to a model with no
+new format work at all, but it only narrows to 3.4 catalogues on average — a
+shortlist, not an answer.
+
+The real lookup needs the F3 reader: `SP.CH` keyed on
+`MODEL || chassis.padStart(8, "0")` gives the exact `MVS` for a chassis, and
+`SP.RT` keyed on `MODEL || chassis.padStart(7, "0")` gives that individual
+car's build record, including `CODOPT` (options fitted) and `CARATT`
+(characteristics). Those are criteria codes, so a chassis number would produce
+a specification for _this car_ — which removes the closed-world inference
+phase 3 has to make. openPER's `KtdReader` and `Release84VinSearch` are MIT and
+document both key constructions.
 
 ## Ranked risks
 

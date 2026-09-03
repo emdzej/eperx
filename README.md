@@ -52,10 +52,14 @@ than a guess. With no external answer key it is validated by reachability —
 `MVS` lists every sold version, so a drawing no version can see is dead data,
 and **18 of 81,415 drawings are unreachable (0.02%)**.
 
-**Not built yet:** a parts-by-vehicle view. The evaluator exists but the UI has
-no vehicle picker, so patterns are displayed verbatim and marked
-uninterpreted. See [`docs/data-format.md`](docs/data-format.md) §5 for the
-grammar and what is still open in it.
+**Parts by vehicle works.** Pick a sold version and the drawing list, the
+diagram and the callouts are scored against it — fits, does not fit, or not
+determined — with the pattern shown both as written and in words. Choosing a
+1.3 JTD Panda narrows a subgroup from 13 drawings to 3.
+
+There is no VIN lookup yet: `SP.DB` can route a VIN's type code to a shortlist
+of catalogues, but resolving a chassis number to its exact version needs the
+F3 reader. See [`docs/plan.md`](docs/plan.md) phase 4.
 
 ## Why the drawings need no conversion
 

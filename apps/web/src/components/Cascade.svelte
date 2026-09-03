@@ -1,4 +1,5 @@
 <script lang="ts">
+  import VehiclePicker from "./VehiclePicker.svelte";
   import {
     browse,
     selectCatalogue,
@@ -67,7 +68,8 @@
 <!-- Five levels is inherently wide, so the cascade sits across the top and
      scrolls sideways if it must, rather than squeezing the drawing into a
      strip. ePER's own UI puts its selectors above the diagram too. -->
-<div class="flex min-h-0 flex-1 divide-x divide-divider overflow-x-auto">
+<div class="flex min-h-0 flex-1">
+  <div class="flex min-h-0 flex-1 divide-x divide-divider overflow-x-auto">
   {#each levels as level (level.title)}
     <div class="flex min-h-0 w-44 shrink-0 flex-col">
       <div
@@ -89,5 +91,7 @@
         {/each}
       </div>
     </div>
-  {/each}
+    {/each}
+  </div>
+  <VehiclePicker />
 </div>
