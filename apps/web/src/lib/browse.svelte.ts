@@ -34,6 +34,7 @@ import {
 } from "@eperx/catalogue";
 import { HttpSource } from "./http-source";
 import { tree } from "./tree.svelte";
+import { vin, vinSpecification, vinSummary } from "./vin.svelte";
 
 /**
  * Where the user is in the catalogue, and what that implies is on screen.
@@ -70,8 +71,10 @@ export const browse = $state({
   fit: new Map<string, string>(),
   /** Truth per callout, keyed as reference/sequence/part. */
   calloutFit: new Map<string, string>(),
-  /** Hide what definitely does not fit the chosen version. */
+  /** Hide what definitely does not fit the chosen vehicle. */
   hideUnfit: true,
+  /** Where the current specification came from. */
+  source: undefined as "version" | "vin" | undefined,
 
   search: "" as string,
   parts: [] as Part[],
@@ -152,6 +155,7 @@ export async function selectCatalogue(entry: CatalogueEntry): Promise<void> {
     });
     clearDrawing();
     browse.version = undefined;
+    browse.source = undefined;
     browse.versions = [];
     browse.versionSearch = "";
     browse.fit = new Map();
@@ -325,6 +329,41 @@ async function loadCriteria(catalogue: string): Promise<void> {
   ]);
 }
 
+/**
+ * Adopt the vehicle a VIN lookup found.
+ *
+ * Preferred over a version when available: `CARATT` describes that individual
+ * car, so this is the specification of a vehicle rather than of a model
+ * variant.
+ */
+export async function applyVin(): Promise<void> {
+  await run(async () => {
+    const found = vinSpecification(vocabulary);
+    if (!found) {
+      browse.error = "That vehicle has no build record on this disc, so its options are unknown.";
+      return;
+    }
+    specification = found;
+    browse.source = "vin";
+    browse.version = undefined;
+    scoreDrawings();
+    scoreCallouts();
+    if (browse.drawing && browse.fit.get(drawingKey(browse.drawing)) === Truth.False) {
+      const replacement = browse.drawings.find(
+        (candidate) => browse.fit.get(drawingKey(candidate)) !== Truth.False,
+      );
+      if (replacement) await showDrawing(replacement);
+    }
+  });
+}
+
+/** What the current filter is based on, for the UI to state plainly. */
+export function specificationLabel(): string | undefined {
+  if (browse.source === "vin") return vinSummary() ?? vin.query;
+  if (browse.source === "version") return browse.version?.description ?? undefined;
+  return undefined;
+}
+
 export async function searchVersions(query: string): Promise<void> {
   if (!tree.catalogue || !browse.catalogue) return;
   await run(async () => {
@@ -346,6 +385,7 @@ export async function searchVersions(query: string): Promise<void> {
 export async function selectVersion(version: Version | undefined): Promise<void> {
   await run(async () => {
     browse.version = version;
+    browse.source = version ? "version" : undefined;
     specification = version && specificationOf(version);
     if (specification) specification = closeSpecification(specification, vocabulary);
     scoreDrawings();

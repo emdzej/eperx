@@ -17,6 +17,7 @@
     "@commander-js/extra-typings": "^15.0.0",
     "@eperx/catalogue": "workspace:*",
     "@eperx/core": "workspace:*",
+    "@eperx/ktd": "workspace:*",
     "@eperx/res": "workspace:*",
     "chalk": "^6.0.0",
     "commander": "^15.0.0",

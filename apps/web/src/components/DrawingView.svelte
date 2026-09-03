@@ -11,7 +11,7 @@
   // "Unknown" is always shown: declining to answer must not look like an
   // answer, and hiding on uncertainty would quietly lose real parts.
   const hidden = (verdict: string | undefined) =>
-    browse.version !== undefined && browse.hideUnfit && verdict === "false";
+    browse.source !== undefined && browse.hideUnfit && verdict === "false";
 
   const visibleDrawings = $derived(
     browse.drawings.filter((d) => !hidden(browse.fit.get(drawingKey(d)))),
@@ -24,6 +24,12 @@
     verdict === "true" ? "text-ok" : verdict === "false" ? "text-danger" : "text-warn";
   const label = (verdict: string | undefined) =>
     verdict === "true" ? "fits" : verdict === "false" ? "does not fit" : "not determined";
+  // A glyph as well as a colour. "does not fit" and "not determined" are
+  // amber and red, which are hard to tell apart at this size and impossible
+  // for a reader who cannot see the difference at all — and the distinction
+  // is the whole point of three-valued logic.
+  const glyph = (verdict: string | undefined) =>
+    verdict === "true" ? "✓" : verdict === "false" ? "✗" : "?";
 </script>
 
 <div class="flex min-h-0 flex-1">
@@ -58,14 +64,15 @@
             </div>
             {#if drawing.pattern}
               <div
-                class="truncate font-mono text-[10px] {browse.version
+                class="truncate font-mono text-[10px] {browse.source
                   ? mark(browse.fit.get(drawingKey(drawing)))
                   : 'text-warn'}"
-                title={browse.version
+                title={browse.source
                   ? `${label(browse.fit.get(drawingKey(drawing)))} — ${drawing.pattern}`
                   : drawing.pattern}
               >
-                {drawing.pattern}
+                {#if browse.source}{glyph(browse.fit.get(drawingKey(drawing)))}
+                {/if}{drawing.pattern}
               </div>
             {/if}
           </button>
@@ -97,12 +104,13 @@
           <div class="flex items-baseline gap-2 border-b border-rule px-3 py-1">
             <span class="text-xs uppercase tracking-wide text-faint">fits</span>
             <span
-              class="font-mono text-xs {browse.version
+              class="font-mono text-xs {browse.source
                 ? mark(browse.fit.get(drawingKey(browse.drawing)))
                 : 'text-warn'}">{browse.drawing.pattern}</span
             >
-            {#if browse.version}
+            {#if browse.source}
               <span class="text-[10px] {mark(browse.fit.get(drawingKey(browse.drawing)))}">
+                {glyph(browse.fit.get(drawingKey(browse.drawing)))}
                 {label(browse.fit.get(drawingKey(browse.drawing)))}
               </span>
             {/if}
@@ -139,12 +147,19 @@
                   </td>
                   <td class="px-2 py-1 text-right font-mono text-muted">{item.quantity ?? ""}</td>
                   <td
-                    class="px-3 py-1 font-mono {browse.version
+                    class="px-3 py-1 font-mono {browse.source
                       ? mark(browse.calloutFit.get(calloutKey(item)))
                       : 'text-warn'}"
-                    title={item.formula ? explainPattern(item.formula) : ""}
+                    title={[
+                      browse.source ? label(browse.calloutFit.get(calloutKey(item))) : "",
+                      item.formula ? explainPattern(item.formula) : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" — ")}
                   >
-                    {item.formula ?? ""}
+                    {#if browse.source}<span class="mr-1"
+                        >{glyph(browse.calloutFit.get(calloutKey(item)))}</span
+                      >{/if}{item.formula ?? ""}
                   </td>
                 </tr>
               {:else}

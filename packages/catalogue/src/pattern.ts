@@ -44,6 +44,16 @@ export interface Criterion {
   /** `VMK_COD`, e.g. `"1.2"`. Empty string for a bare equipment code. */
   code?: string;
   /**
+   * True when the source wrote the split explicitly with a `|`.
+   *
+   * `SP.RT.CARATT` — a vehicle's own characteristics — uses `CMB|DS` and
+   * `CC|1.2` where `DRAWINGS.PATTERN` writes `CMBDS` and `CC1.2`. Same
+   * criteria, same grammar, but with the type/code boundary marked. `token`
+   * is normalised to the unseparated form so the two match; this records that
+   * the split came from the data rather than from the vocabulary.
+   */
+  separated?: boolean;
+  /**
    * The `?` suffix, seen on 3 `MVS` rows out of 36,332 and nowhere else.
    * **Meaning unknown.** Preserved rather than dropped so that it cannot be
    * silently read as plain truth.
@@ -178,6 +188,22 @@ export function parsePattern(input: string): Pattern {
       token = token.slice(0, -1);
       uncertain = true;
     }
+
+    // A `|` marks the type/code boundary explicitly — `SP.RT.CARATT` writes
+    // `CMB|DS` for what a drawing pattern writes `CMBDS`. The token is
+    // normalised to the unseparated form, because that is what every other
+    // source uses and what evaluation compares.
+    const bar = token.indexOf("|");
+    if (bar > 0 && bar < token.length - 1) {
+      const criterion: Criterion = {
+        token: token.slice(0, bar) + token.slice(bar + 1),
+        type: token.slice(0, bar),
+        code: token.slice(bar + 1),
+        separated: true,
+      };
+      return uncertain ? { ...criterion, uncertain } : criterion;
+    }
+
     return uncertain ? { token, uncertain } : { token };
   };
 
@@ -224,10 +250,16 @@ export function resolveCriterion(token: string, vocabulary: Vocabulary): Criteri
   return { token };
 }
 
-/** Resolve every criterion in a parsed pattern against a vocabulary. */
+/**
+ * Resolve every criterion in a parsed pattern against a vocabulary.
+ *
+ * A criterion the source already split with a `|` is left alone: the data's
+ * own boundary beats anything inferred from the vocabulary.
+ */
 export function resolvePattern(pattern: Pattern, vocabulary: Vocabulary): Pattern {
   switch (pattern.kind) {
     case "criterion": {
+      if (pattern.criterion.separated) return pattern;
       const resolved = resolveCriterion(pattern.criterion.token, vocabulary);
       return {
         kind: "criterion",

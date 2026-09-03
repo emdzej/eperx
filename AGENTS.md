@@ -200,6 +200,30 @@ Traps found while doing this:
   Two index changes were "made" and then found still absent from the built
   output. Grep for the result.
 
+## Reading F3 has two traps that produce plausible rubbish
+
+Both are in [`docs/data-format.md` §4](docs/data-format.md#4-spch-sptr-sprt--the-f3-format),
+and both were found the hard way.
+
+- **The record length prefix is 1 byte or 2, and the header does not say
+  which.** Checking that records tile the block cannot tell them apart: a
+  two-byte length below 256 has a zero high byte, which a one-byte reader eats
+  as the first content byte, and the records tile just as neatly one byte out
+  of step. `SP.TR` read that way and gave a `MODELLO` of `"\0" + "10"`. What
+  settles it is the index's promise that a block's last record carries the key
+  the index recorded — `detectPrefixSize` tries both and keeps whichever
+  reproduces it.
+- **The index records block _maxima_, so it cannot answer "the highest key
+  under this prefix".** A run ending at `1010000400` sits inside a block
+  indexed `1500000100`, so scanning index keys understates the answer. A test
+  caught that. `highestKeyUnder` reads the containing block.
+
+And one that is not a trap but is easy to get wrong: **chassis numbers are not
+all numeric.** They roll into letters as a series fills, so the Fiat 500 has a
+numeric run, a `J` run and an `O` run. Those do not compare as one ordered
+space, and "is this chassis beyond what the disc holds?" is only answerable
+within a series.
+
 ## The browser's SQLite is fussy, and three fixes are load-bearing
 
 - **`pool.exec` does not return rows.** It is typed `RowObject[]` but returns
@@ -212,6 +236,12 @@ Traps found while doing this:
   Vite does not — in dev the worker loads as a classic script, hits an ES
   `import`, and dies with "Worker bootstrap failed". The patch is in `patches/`
   and registered in `pnpm-workspace.yaml`. Do not drop it.
+- **`bz2` exports nothing in a browser.** It ends with
+  `if (typeof window !== "undefined") window.bz2 = exports; else module.exports = exports`,
+  so a bundler gets an empty module and the global is the only way in.
+  `packages/ktd/src/bzip2.ts` looks in both places. It is used rather than
+  `seek-bzip` — also MIT, and 4× faster — because `seek-bzip` builds its output
+  with Node's `Buffer` and dies with "Buffer is not defined" in a browser.
 - **`optimizeDeps.exclude` and `worker.format: "es"` are both required.** The
   pre-bundler rewrites the package's worker URLs and breaks them; the default
   `iife` worker format cannot express the SQLite worker's code splitting and
@@ -278,8 +308,12 @@ Honest list, so nobody reports these as discoveries.
   alternatives on one callout are resolved. The browser also closes the world
   per criteria type, which is an inference that raises the unreachable count
   from 18 to 209; it says so on screen.
-- **No VIN lookup.** A VIN's type code can route to a shortlist of catalogues
-  from `SP.DB` alone, but a chassis number needs the F3 reader.
+- **`SP.TR` is read but unused.** Its 120,134,472 rows key
+  `MODELLO+TELAIO+MATRICOLA` to a `PART` — per-vehicle fitment — and how that
+  relates to `TBDATA` is not worked out.
+- **The F3 secondary indexes are unexamined.** `SP.CH` and `SP.RT` each carry
+  one on `VIN`; nothing needs them, because a VIN reaches the primary index
+  through its type code and chassis number.
 - **No F3 reader**, so no VIN search. Header parses by eye only.
 - **`HOTSPOTS` is null on every row inspected**, so callouts are not clickable.
   openPER has the same gap.

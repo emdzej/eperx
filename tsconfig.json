@@ -3,6 +3,7 @@
   "references": [
     { "path": "./packages/core" },
     { "path": "./packages/catalogue" },
+    { "path": "./packages/ktd" },
     { "path": "./packages/res" },
     { "path": "./apps/cli" }
   ]

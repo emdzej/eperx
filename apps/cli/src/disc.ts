@@ -27,6 +27,10 @@ export interface DiscFiles {
   accessories?: string;
   /** Chassis and VIN data, in the F3 blocked format. */
   chassis?: string;
+  /** Per-vehicle build records — options and characteristics as fitted. */
+  build?: string;
+  /** Per-vehicle part fitment, 120M rows. Not read yet. */
+  fitment?: string;
   /** Price lists. Out of scope by decision — see docs/plan.md. */
   priceList?: string;
   /** Drawing shards: `images/*.res`, ordinary ZIPs of stored PNGs. */
@@ -59,6 +63,8 @@ export function openDisc(root: string): Disc {
     if (family === "SP" && kind === "DB") files.spareParts = path;
     if (family === "AM" && kind === "DB") files.accessories = path;
     if (family === "SP" && kind === "CH") files.chassis = path;
+    if (family === "SP" && kind === "RT") files.build = path;
+    if (family === "SP" && kind === "TR") files.fitment = path;
     if (family === "SP" && kind === "PL") files.priceList = path;
   }
 

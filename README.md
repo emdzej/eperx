@@ -27,12 +27,14 @@ Working today:
   up front.
 - `@eperx/catalogue` — the queries, transport-agnostic, so the CLI and the
   browser run the same SQL.
+- `@eperx/ktd` — reader for **F3**, ePER's own chassis format: 41.4 M chassis
+  records, binary-searched over ranged reads at about 20 kB a lookup.
 - `@eperx/res` — reader for the `images/*.res` drawing shards, over HTTP
   `Range`, a local file, or Node `fs`, behind one `read(pos, len)`.
 - `@eperx/catalogue` also holds the `PATTERN` parser and its three-valued
   evaluator, with 36 tests.
 - `eperx` CLI — `disc`, `tables`, `import`, `browse`, `part`,
-  `applicability`, `image`.
+  `applicability`, `vin`, `f3`, `image`.
 - 55 tables and 8,534,325 rows understood, with the hierarchy, the description
   joins and the two schema traps documented.
 
@@ -52,14 +54,16 @@ than a guess. With no external answer key it is validated by reachability —
 `MVS` lists every sold version, so a drawing no version can see is dead data,
 and **18 of 81,415 drawings are unreachable (0.02%)**.
 
-**Parts by vehicle works.** Pick a sold version and the drawing list, the
-diagram and the callouts are scored against it — fits, does not fit, or not
-determined — with the pattern shown both as written and in words. Choosing a
-1.3 JTD Panda narrows a subgroup from 13 drawings to 3.
+**Parts by vehicle works, by version or by VIN.** Choosing either scores the
+drawing list, the diagram and every callout as fits / does not fit / not
+determined — a 1.3 JTD Panda narrows a subgroup from 13 drawings to 3 — with
+the pattern shown as written and in words. Only a definite non-fit is hidden;
+"not determined" is always shown, because declining to answer must not look
+like an answer.
 
-There is no VIN lookup yet: `SP.DB` can route a VIN's type code to a shortlist
-of catalogues, but resolving a chassis number to its exact version needs the
-F3 reader. See [`docs/plan.md`](docs/plan.md) phase 4.
+A VIN goes further. `SP.RT` holds that individual car's build record, so its
+own options and characteristics drive the filter rather than its model
+variant's. See [`docs/data-format.md`](docs/data-format.md) §4 and §5.
 
 ## Why the drawings need no conversion
 
@@ -174,6 +178,21 @@ node $cli applicability -d data -c 33     # just one
 It parses every pattern and reports how many drawings no vehicle version can
 reach. That number is the regression test for the grammar.
 
+### Look a vehicle up
+
+```sh
+node $cli vin ZLA84300003084515 -D /Volumes/ePER\ ed.83 -d data
+node $cli vin -D /Volumes/ePER\ ed.83 -d data -m 101 -c 3084515
+
+# Or inspect an F3 file directly
+node $cli f3 "/Volumes/ePER ed.83/data/SP.CH.04147.FCTLR"
+```
+
+A VIN carries the model type code and the chassis number, which is how ePER's
+own index is keyed, so nothing VIN-specific is needed beyond splitting the two
+out. The answer is that chassis's exact version, engine number, build date
+and — from `SP.RT` — the options and characteristics it left the factory with.
+
 ### Run the browser client
 
 `pnpm dev` serves an imported tree at `/data`, honouring `Range`:
@@ -208,7 +227,8 @@ apps/
   web        Svelte 5 + Vite browser client
 packages/
   core       shared types and the ByteSource primitive
-  catalogue  the queries: hierarchy, drawings, callouts, part search
+  catalogue  the queries, the PATTERN grammar, the applicability evaluator
+  ktd        the F3 chassis reader
   res        the drawing-shard reader
 docs/
 re/tools/    reverse-engineering scratch

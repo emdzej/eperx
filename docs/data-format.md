@@ -204,7 +204,10 @@ data offset cannot be computed from the central directory alone.
 
 ## 4. SP.CH, SP.TR, SP.RT — the F3 format
 
-A custom blocked, indexed store. Not yet implemented in eperx.
+ePER's own format, and the only one on the disc that is neither Access nor
+ZIP: a blocked, sorted, bzip2-compressed store with a sparse index. It holds
+everything per-vehicle — 41,422,723 chassis records, 10,486,480 build records
+and 120,134,472 fitment rows. **Implemented** in `@eperx/ktd`.
 
 The header opens with the ASCII magic `F3`, then table and column names in
 fixed-width ASCII fields, then bzip2-compressed data blocks (`BZh91AY&SY`).
@@ -216,6 +219,61 @@ Read out of the headers:
 | `SP.RT`     | table `RTM`: `MOD_TEL`, `VIN`, `CIS`, `TELAIO`, `ORDINE`, `MARCA`, `MODELLO`, `VERSIONE`, `SERIE`, `GUIDA`, `ALLESTMERC`, `COLINT`, `COLEST`, `MERCDEST`, `CODALLSPEC`, `CODOPT`, `CODSPECSC`, `CODGOMM`, `MODCODEP`, `CARATT` |
 | `SP.TR`     | table `TA`: `MODELLO`, `TELAIO`, `MATRICOLA`, `PART`                                                                                                                                                                           |
 | `SP.RTCHRY` | table `VINCHRYSLER`: `VIN`, `BUILDDATE`, `PATTERN`                                                                                                                                                                             |
+
+### Layout
+
+```
+ 0   2   "F3"
+ 2   4   record count
+ 6   2   records per block
+ 8  20   reference table positions (5 × uint32, 0 = unused)
+28   4   primary index position
+32  12   secondary index positions (3 × uint32)
+44  20   table name, NUL-padded ASCII
+64   1   primary key field count
+65  ..   primary key fields (23 bytes each)
+     1   secondary index count; per index: 1 byte field count, then its fields
+     1   column count
+    ..   columns (23 bytes each)
+```
+
+A field descriptor is 20 bytes of NUL-padded name, then a type byte
+(`1` string, `0` reference), then its offset and width **in the unpacked
+record**. A width of `0` means "to the end of the record", which is how
+`SP.CH.VIN`, `SP.RT.CARATT` and `SP.RTCHRY.PATTERN` hold variable text.
+
+The primary index is `uint32 count`, then `count` entries of
+`key[keyLength], uint32 blockStart, uint32 blockEnd`. Each key is the
+**highest** in its block — confirmed on all four files, where the last
+record's key equals the index entry exactly. A block is a bare bzip2 stream
+holding `recordsPerBlock` records, each prefixed by its own total length.
+
+A packed record stores a reference as a `uint16` index into a reference table
+and a string inline, so packed offsets differ from the unpacked `start`
+values. Only `SP.CH` has a reference table: 11,033 distinct `MVS` codes,
+which 41 million records share.
+
+### The record length prefix is 1 or 2 bytes, and the header does not say
+
+It is 1 for `SP.CH` and 2 for `SP.RT`, `SP.TR` and `SP.RTCHRY`, and nothing in
+the header distinguishes them.
+
+Nor does checking that records tile the block: a two-byte length below 256 has
+a zero high byte, which a one-byte reader consumes as the first content byte,
+and the records then tile just as neatly one byte out of step. `SP.TR` reads
+that way and yields a `MODELLO` of `"\0" + "10"` — plausible-looking rubbish.
+
+What settles it is the index's own promise. The last record in a block has the
+key the index recorded for it, and a wrong prefix shifts every field so that
+equality fails. `@eperx/ktd` tries both and keeps whichever reproduces the key.
+
+### Reading it over HTTP
+
+The index is a sorted fixed-width array, so it is binary-searched over ranged
+reads rather than downloaded. `SP.CH`'s index is 20,712 entries of 19 bytes —
+393 kB — and a lookup touches about fifteen 19-byte slices plus one
+compressed block. A chassis lookup against the 420 MB file therefore costs
+roughly 20 kB, and works unchanged in a browser.
 
 **`SP.RT` is the per-vehicle build record**, not an ordering file as an earlier
 draft of this document guessed. The Italian names give it away — `TELAIO` is
@@ -237,16 +295,28 @@ catalogues (Nuova Panda, Nuova 500 and its Abarth, 500 MY2012 and its Abarth,
 New Ypsilon), and across all codes it narrows to 3.4 catalogues on average and
 as many as 15.
 
-**By chassis number, which needs the F3 reader.** openPER's
-`Release84VinSearch` shows the key construction: `SP.CH` is looked up with
+**By chassis number.** `SP.CH` is looked up with
 `MODEL || chassis.padStart(8, "0")` and yields that chassis's `MVS` — the exact
 sold version — with its VIN, engine, build date and interior colour. `SP.RT` is
-then looked up with `MODEL || chassis.padStart(7, "0")` for the build record
-above.
+looked up with `MODEL || chassis.padStart(7, "0")` for the build record above.
+Both key constructions come from openPER's `Release84VinSearch`, and both are
+confirmed against real records.
 
-That second route matters for applicability: `CARATT` and `CODOPT` would give a
-specification for _this car_ rather than for its version, which removes the
-closed-world inference in [§5](#5-the-pattern-grammar) entirely. openPER notes
+The chassis number is simply the **VIN's trailing characters**: `SP.CH` keys on
+the last 8, `SP.RT` on the last 7. `ZLA84300003084515` gives `3084515`, and
+`SP.RT` holds `MOD_TEL = 1013084515`.
+
+Chassis numbers are **not** all numeric. They roll into letters as a series
+fills — 884 of `SP.RT`'s 10,487 index keys have one, and the Fiat 500 runs a
+`J` series and an `O` series alongside its numeric one. Those runs do not
+compare as a single ordered space, so "is this chassis beyond what the disc
+holds?" is only answerable _within_ a series.
+
+This route is what makes applicability exact. `CARATT` is _this car's_
+characteristics, written with an explicit `|` between type and code —
+`CMB|DS`, `CC|1.2`, `L|L2` — where a drawing pattern writes them concatenated.
+Same criteria, same grammar, with the boundary marked;
+[§5](#5-the-pattern-grammar) normalises the two to one form. openPER notes
 that roughly 25% of vehicles have such a record; the rest fall back to the
 version.
 
@@ -335,6 +405,13 @@ So `CMBBZ` = `CMB` + `BZ`, and `CC1.2` = `CC` + `1.2`. A token may also be a
 bare equipment code with no value — `011`, `4VU`, `XAC` — which appears in
 `CAT_VAL` as a `VMK_TYPE` with a null `VMK_COD`.
 
+**One source writes the boundary explicitly.** `SP.RT.CARATT`, a vehicle's own
+characteristics, uses a `|` between type and code: `CMB|DS`, `CC|1.2`,
+`L|L2`, `MERC|3109`. Same criteria and same grammar, but with the split given
+rather than inferred. Tokens are normalised to the unseparated form so the two
+sources compare, and a criterion the data already split is never re-resolved
+against the vocabulary — the data's own boundary wins.
+
 ### Tokenisation is unambiguous in practice
 
 Type names are **not** prefix-free. Measured collisions within a single
@@ -411,6 +488,16 @@ credible. A rise in that number is a regression.
 ### What is still open
 
 - **`?`** — 3 `MVS` rows, meaning unknown.
+- **Whether closing a specification per criteria type is right.** An `MVS`
+  pattern states what a version has and negates the equipment it lacks, but
+  does not negate the alternatives of a valued characteristic, so a 1.3 diesel
+  says nothing about `CC1.2` and a 1.2 drawing evaluates to _unknown_ rather
+  than _false_. Valued types are effectively single-valued — 36,331 of 36,332
+  specifications give each one exactly one value — so closing them is
+  defensible, and without it a parts-by-vehicle filter is unusable. But it
+  raises the unreachable-drawing count from 18 to 209, and the 191 that flip
+  blame no single type. `eperx applicability` defaults to the open reading and
+  takes `--close` to measure the other.
 - **Precedence of `!` against an implicit AND.** `!407(CC1.8,CC2.0)` is read
   as `(!407)+(CC1.8,CC2.0)`, the conventional binding for a prefix operator,
   but `!(407+(…))` is also syntactically available and the two differ. 26

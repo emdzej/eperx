@@ -145,24 +145,38 @@ callout are resolved — almost certainly `TBD_SEQ` order, since 84,897 of
 84,902 multi-formula callouts number their rows distinctly, but that is
 inferred rather than confirmed.
 
-**What is not built:** a parts-by-vehicle view. The evaluator exists but the
-UI has no vehicle picker, so nothing filters yet — patterns are shown verbatim
-and marked uninterpreted.
+**Built:** a parts-by-vehicle view. Choosing a version — or a VIN — scores the
+drawing list, the diagram and every callout as fits / does not fit / not
+determined, with the pattern shown both as written and in words. Only a
+definite non-fit is hidden; "not determined" is always shown, because
+declining to answer must not look like an answer.
 
-**4. VIN.** Two routes, and the cheap one is already possible.
+**4. VIN.** Done. `@eperx/ktd` reads the F3 format, and both routes work.
 
 `SP.DB`'s `VIN` table maps a VIN's three-character type code to a model with no
 new format work at all, but it only narrows to 3.4 catalogues on average — a
 shortlist, not an answer.
 
-The real lookup needs the F3 reader: `SP.CH` keyed on
+The real lookup goes to the F3 files: `SP.CH` keyed on
 `MODEL || chassis.padStart(8, "0")` gives the exact `MVS` for a chassis, and
 `SP.RT` keyed on `MODEL || chassis.padStart(7, "0")` gives that individual
-car's build record, including `CODOPT` (options fitted) and `CARATT`
-(characteristics). Those are criteria codes, so a chassis number would produce
-a specification for _this car_ — which removes the closed-world inference
-phase 3 has to make. openPER's `KtdReader` and `Release84VinSearch` are MIT and
-document both key constructions.
+car's build record — `CODOPT` (options fitted) and `CARATT` (characteristics),
+which are criteria codes. So a VIN yields a specification for _this car_,
+which is stronger than the version-level one phase 3 has to close by
+inference.
+
+The index is a sorted fixed-width array, so it is binary-searched over ranged
+reads: a lookup against the 420 MB `SP.CH` costs about fifteen 19-byte reads
+plus one compressed block — roughly 20 kB — and runs unchanged in the browser.
+Measured end to end, a CLI lookup against `SP.CH` + `SP.RT` takes **1.2 s**.
+
+openPER's `KtdReader` and `Release84VinSearch` are MIT and documented both key
+constructions; every field was then confirmed against all four F3 files.
+
+**What it does not solve:** a disc is a snapshot. Edition 83 stops at chassis
+`0J169775` for the Fiat 500, so a later car is simply absent — which the
+lookup now reports as such, scoped to the chassis series, rather than as a
+flat "not found".
 
 ## Ranked risks
 

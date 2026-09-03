@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { inflateRawSync } from "node:zlib";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { DatabaseSync } from "./sqlite.js";
 import { Command, Option } from "@commander-js/extra-typings";
 import chalk from "chalk";
@@ -21,11 +21,13 @@ import {
   whereUsed,
 } from "@eperx/catalogue";
 import { checkApplicability } from "./applicability.js";
+import { lookupVehicle } from "./vin.js";
 import { openCatalogue } from "./browse.js";
 import { openDisc } from "./disc.js";
 import { convertDatabase } from "./convert.js";
 import { importImages } from "./images.js";
 import { ACCESSORIES_INDEXES, CATALOGUE_INDEXES } from "./indexes.js";
+import { F3Table } from "@eperx/ktd";
 import { FileSource } from "./node-source.js";
 
 const CATALOGUE_DB = "catalogue.sqlite";
@@ -92,6 +94,7 @@ program
   )
   .option("--no-accessories", "skip the accessories (Mopar) database")
   .option("--no-images", "skip the drawing shards entirely")
+  .option("--no-chassis", "skip the F3 chassis and build files (706 MB)")
   .option("--index-images-in-place", "index the shards where they are instead of copying 4.7 GB")
   .option("-f, --force", "replace an existing tree")
   .option(
@@ -168,6 +171,26 @@ program
       );
     }
 
+    // The F3 files are copied verbatim, like the drawing shards: they are
+    // already a blocked, indexed store that a browser can binary-search over
+    // `Range`, so converting them would gain nothing.
+    let chassis;
+    if (options.chassis && (disc.files.chassis || disc.files.build)) {
+      console.log(`\n${chalk.bold("chassis")} → chassis/`);
+      mkdirSync(join(options.out, "chassis"), { recursive: true });
+      chassis = {} as Record<string, string>;
+      for (const [key, from] of [
+        ["chassis", disc.files.chassis],
+        ["build", disc.files.build],
+      ] as const) {
+        if (!from) continue;
+        const name = basename(from);
+        copyFileSync(from, join(options.out, "chassis", name));
+        chassis[key] = name;
+        console.log(`  ${name}  ${(statSync(from).size / 1e6).toFixed(0)} MB`);
+      }
+    }
+
     writeFileSync(
       join(options.out, MANIFEST),
       JSON.stringify(
@@ -185,6 +208,9 @@ program
             shards: images.shards,
             entries: images.entries,
           },
+          // Named in the manifest because the filenames carry the release
+          // number, so a client cannot guess them.
+          chassis: chassis && { dir: "chassis", files: chassis },
         },
         null,
         2,
@@ -388,6 +414,116 @@ program
       console.log(chalk.dim(`\n  ${((Date.now() - started) / 1000).toFixed(1)}s`));
     } finally {
       db.close();
+    }
+  });
+
+program
+  .command("vin")
+  .description("look a vehicle up by VIN, or by model and chassis number")
+  .argument("[vin]", "17-character VIN, e.g. ZLA84300003084515")
+  .requiredOption("-D, --disc <disc>", "mounted disc, or its data directory")
+  .requiredOption("-d, --data <dir>", "an imported tree (for the VIN table)")
+  .option("-m, --model <cod>", "MOD_COD, when you have no VIN")
+  .option("-c, --chassis <number>", "chassis number, when you have no VIN")
+  .action(async (vin, options) => {
+    const disc = openDisc(options.disc);
+    const db = new DatabaseSync(join(options.data, CATALOGUE_DB), { readOnly: true });
+    try {
+      const found = await lookupVehicle(disc, db, {
+        vin,
+        model: options.model,
+        chassis: options.chassis,
+      });
+
+      console.log(
+        `${chalk.bold(vin ?? `${options.model}/${options.chassis}`)}  ` +
+          chalk.dim(`chassis ${found.chassis}, models tried ${found.models.join(", ")}`),
+      );
+
+      if (!found.chassisRecord && !found.buildRecord) {
+        console.log(chalk.yellow("\n  not on this disc"));
+        for (const { model, chassis, beyond } of found.highest ?? []) {
+          console.log(
+            `    model ${model}: highest comparable chassis here is ${chassis}` +
+              (beyond ? chalk.dim("  → this one is beyond it") : ""),
+          );
+        }
+        console.log(
+          chalk.dim("\n  A disc is a snapshot; vehicles built after it was pressed are absent."),
+        );
+        return;
+      }
+
+      if (found.chassisRecord) {
+        console.log(chalk.bold("\n  chassis record (SP.CH)"));
+        for (const [key, value] of Object.entries(found.chassisRecord)) {
+          if (value) console.log(`    ${key.padEnd(14)} ${value}`);
+        }
+      }
+      if (found.buildRecord) {
+        console.log(chalk.bold("\n  build record (SP.RT)"));
+        for (const [key, value] of Object.entries(found.buildRecord)) {
+          if (!value) continue;
+          // CARATT is the vehicle's own criteria expression, in the same
+          // grammar as DRAWINGS.PATTERN — the point of the whole exercise.
+          const shown = key === "CARATT" ? chalk.yellow(value) : value;
+          console.log(`    ${key.padEnd(14)} ${shown}`);
+        }
+      }
+    } finally {
+      db.close();
+    }
+  });
+
+program
+  .command("f3")
+  .description("inspect an F3 file: its header, and a block of rows")
+  .argument("<file>", "SP.CH / SP.RT / SP.TR / SP.RTCHRY")
+  .option("-b, --block <n>", "dump this block's rows", "0")
+  .option("-n, --rows <n>", "how many rows to print", "5")
+  .action(async (file, options) => {
+    const source = new FileSource(file);
+    try {
+      const table = await F3Table.open(source);
+      const h = table.header;
+      console.log(
+        `${chalk.bold(h.table)}  ${h.records.toLocaleString()} records, ` +
+          `${h.recordsPerBlock} per block, ${(await table.blocks()).toLocaleString()} blocks`,
+      );
+      console.log(
+        `  key      ${h.primaryKey.map((f) => `${f.name}(${f.length})`).join(" + ")}` +
+          chalk.dim(`  = ${h.keyLength} bytes`),
+      );
+      if (h.secondaryKeys.length) {
+        console.log(
+          chalk.dim(
+            `  also indexed by ${h.secondaryKeys
+              .map((fields) => fields.map((f) => f.name).join("+"))
+              .join(", ")} (not read)`,
+          ),
+        );
+      }
+      console.log(
+        `  columns  ${h.columns
+          .map((c) => `${c.name}${c.length ? `(${c.length})` : "(rest)"}`)
+          .join(" ")}`,
+      );
+
+      const rows = await table.blockRows(Number(options.block));
+      console.log(chalk.bold(`\n  block ${options.block}: ${rows.length} rows`));
+      for (const row of rows.slice(0, Number(options.rows))) {
+        console.log(
+          "    " +
+            Object.entries(row)
+              .filter(([, value]) => value)
+              .map(
+                ([key, value]) => `${key}=${value.length > 60 ? `${value.slice(0, 60)}…` : value}`,
+              )
+              .join("  "),
+        );
+      }
+    } finally {
+      source.close();
     }
   });
 

@@ -14,6 +14,7 @@
   "dependencies": {
     "@eperx/catalogue": "workspace:*",
     "@eperx/core": "workspace:*",
+    "@eperx/ktd": "workspace:*",
     "sqlite-wasm-http": "^1.2.0"
   },
   "devDependencies": {
