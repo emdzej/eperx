@@ -127,14 +127,27 @@ Not in the UI yet: cliches (`CLICHE` / `CPXDATA`), the graphical group
 selector (`MAP_*`), supersessions (the `replacements` query exists but nothing
 renders it), and the accessories catalogue.
 
-**3. Applicability.** Specify and verify the `PATTERN` grammar so parts can be
-filtered to a specific vehicle. This is the critical path and the one part that
-can be wrong in a way that matters — see
-[`data-format.md` §5](data-format.md#5-the-pattern-grammar). Characterised:
-`+` AND, `,` OR, `()` grouping, tokens are `VMK_TYPE || VMK_COD` concatenated.
-Not settled: `!`/`@`/`?`, and tokenisation where type names collide (`CM` vs
-`CMB` in catalogue `4Y`). **No parts-by-vehicle view ships before this has
-known-answer tests.**
+**3. Applicability.** The grammar is specified, implemented and validated —
+see [`data-format.md` §5](data-format.md#5-the-pattern-grammar). All 107,957
+distinct patterns parse except 39 malformed ones (0.036%), and `DRAWINGS` and
+`MVS` parse at 100%. Evaluation is Kleene three-valued, so "not known" is a
+possible answer rather than a guess.
+
+There is no external answer key, so it is validated by reachability instead:
+`MVS` lists every sold version of a vehicle, so a drawing no version can see
+is dead data. Across all 223 catalogues, **18 of 81,415 drawings are
+unreachable (0.02%)**. `eperx applicability` reports it, and a rise is a
+regression.
+
+Still open, and all written down: `?` (3 rows), the precedence of `!` against
+an implicit AND (26 patterns), and how several matching alternatives on one
+callout are resolved — almost certainly `TBD_SEQ` order, since 84,897 of
+84,902 multi-formula callouts number their rows distinctly, but that is
+inferred rather than confirmed.
+
+**What is not built:** a parts-by-vehicle view. The evaluator exists but the
+UI has no vehicle picker, so nothing filters yet — patterns are shown verbatim
+and marked uninterpreted.
 
 **4. VIN.** The F3 format in `SP.CH`, so a VIN resolves to a factory
 specification instead of a generic model. openPER's MIT `KtdReader` documents

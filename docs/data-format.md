@@ -224,46 +224,67 @@ reads chassis data from these files rather than from Access.
 
 ## 5. The PATTERN grammar
 
-**This decides which parts fit which vehicle. It is characterised but not
-verified.** Treat any applicability answer as unverified until §5 has
-known-answer tests.
+This decides which parts fit which vehicle. The grammar is **specified and
+validated**; what remains unsettled is listed at the end of this section and
+in [§8](#8-what-is-not-decoded).
 
-Patterns appear on `DRAWINGS.PATTERN` (81,415 of 114,259 drawings carry one),
-`MVS.PATTERN`, `MDF_ACT.PATTERN` and `TBDATA.TBD_VAL_FORMULA`.
+Patterns appear on four columns, and all four share one grammar:
 
-The two levels nest, and one worked example shows how. Drawing
-`33/101/1/20` variant 1 has `PATTERN = CC1.2+(CMBBZ,CMBBG)` — _the 1.2 engine,
-petrol or LPG_ — and within it callout 1 has two alternative cylinder heads:
+| Column                   | Distinct patterns | Fail to parse   |
+| ------------------------ | ----------------- | --------------- |
+| `DRAWINGS.PATTERN`       | 6,787             | **0**           |
+| `MVS.PATTERN`            | 27,110            | **0**           |
+| `MDF_ACT.PATTERN`        | 284               | 1               |
+| `TBDATA.TBD_VAL_FORMULA` | 77,141            | 38              |
+| **all four**             | **107,957**       | **39** (0.036%) |
+
+81,415 of 114,259 drawings carry a pattern; 532,178 `TBDATA` rows carry a
+formula.
+
+### The grammar
 
 ```
-1.1  71740648  CYLINDER HEAD WITH VALVES COMPL   TBD_VAL_FORMULA = CMBBZ
-1.2  71751447  CYLINDER HEAD WITH VALVES         TBD_VAL_FORMULA = CMBBG
+pattern      := alternatives
+alternatives := conjunction ("," conjunction)*     -- OR,  loosest
+conjunction  := term ("+" term)*                   -- AND
+term         := "!"* atom                          -- NOT
+atom         := "(" alternatives ")" | token
+token        := [^+,()!\s]+
 ```
 
-So the drawing's pattern selects which vehicles see the diagram at all, and
-`TBD_VAL_FORMULA` then discriminates between parts _on_ it. Any evaluator has
-to apply both. This is also the shape of a good known-answer test: the two
-formulas partition the drawing's own pattern exactly.
-
-A pattern is a boolean expression over criteria:
-
-- `+` — AND
-- `,` — OR
-- `( )` — grouping
-- `!` — present in the alphabet, presumably negation, **not yet confirmed**
-
-`CC1.2+(CMBBZ,CMBBG)` reads _displacement 1.2 AND (fuel petrol OR fuel
-LPG)_. Most patterns are flat disjunctive normal form: `,`-separated
-conjunctions, up to 250 characters.
-
-The full non-alphanumeric alphabet across all four columns, measured:
-`! , ( ) + . / _ @ ?` plus space, CR and LF. Patterns can span lines. `@` and
-`?` are unexplained.
+- **`+` is AND, `,` is OR**, and `,` binds loosest, so most patterns are a
+  disjunction of conjunctions. `CC1.2+(CMBBZ,CMBBG)` reads as _displacement
+  1.2 AND (fuel petrol OR fuel LPG)_.
+- **`!` is negation** and applies to an atom, which may be a group: 965
+  patterns contain `!(`. It may be separated from its atom by whitespace — 13
+  patterns wrap a line between the two — so it is not a token prefix.
+- **Parentheses nest** (175 patterns) and are otherwise a plain OR of tokens
+  (24,332 groups, against 3,577 containing `+` or further nesting).
+- **Adjacency is an implicit AND.** `ECOCF4(AM47,AM55)` means
+  `ECOCF4+(AM47,AM55)`, and `(LL1,LL2)KW66+320` likewise. All 147 occurrences
+  are exactly adjacent and none is whitespace-separated, which matters —
+  see "whitespace" below. It occurs only in `TBD_VAL_FORMULA` (149 of 110,933
+  distinct, 53 catalogues) and **never** in `DRAWINGS`, `MVS` or `MDF_ACT`.
+- **Whitespace is skipped around operators, but is not itself a separator.**
+  Patterns wrap across lines (14,907 contain a newline), yet two bare tokens
+  side by side are a parse error. That is deliberate: it is what rejects the 2
+  `MDF_ACT.PATTERN` rows holding free-text Italian
+  (`NUOVA CENTRALINA CONTROLLO MOTORE`) rather than reading them as criteria
+  named `NUOVA` and `CENTRALINA`.
+- **`@` is not an operator.** `@MOT` is a `VMK_TYPE` in catalogue `3P`
+  ("ALTERNATIVE ENGINES RANGE"), so `!@MOT1` negates the criterion
+  `@MOT` + `1`. Type names also contain `/` and `_` (`A/T`, `C_LIN`), which is
+  why none of those three characters may be read as syntax.
+- **`?` is a token suffix whose meaning is unknown.** It occurs on 3 `MVS`
+  rows out of 36,332 and nowhere else, always as `<token>?` before a
+  terminator. It is preserved on the parsed criterion rather than dropped, so
+  that it cannot be silently read as plain truth.
 
 ### Criteria are a type concatenated with a code
 
 A token is `VMK_TYPE || VMK_COD` with **no separator**. `CARAT_DSC` gives the
-types for a catalogue and `VMK_DSC` gives the codes. For `CAT_COD` `33`:
+types for a catalogue and `VMK_DSC` and `CAT_VAL` give the codes. For
+`CAT_COD` `33`:
 
 ```
 CARAT_DSC   CMB → 'FUEL'                    VMK_DSC   CMB BZ → 'PETROL'
@@ -273,40 +294,123 @@ CARAT_DSC   CMB → 'FUEL'                    VMK_DSC   CMB BZ → 'PETROL'
             ...  9 types in total                     CC  1.3 → 'JTD'
 ```
 
-So `CMBBZ` = `CMB` + `BZ`, and `CC1.2` = `CC` + `1.2`.
+So `CMBBZ` = `CMB` + `BZ`, and `CC1.2` = `CC` + `1.2`. A token may also be a
+bare equipment code with no value — `011`, `4VU`, `XAC` — which appears in
+`CAT_VAL` as a `VMK_TYPE` with a null `VMK_COD`.
 
-### Tokenisation is ambiguous, and that is the open risk
+### Tokenisation is unambiguous in practice
 
-Type names are not prefix-free. Measured collisions within a single catalogue:
+Type names are **not** prefix-free. Measured collisions within a single
+catalogue:
 
-| Catalogue                    | Types                |
+| Catalogue                    | Colliding types      |
 | ---------------------------- | -------------------- |
 | `4Y`                         | `CM` and `CMB`       |
 | `12`, `13`                   | `G` and `GSS`        |
 | `24`, `25`, `32`, `63`, `75` | `C_LIN` and `COLINT` |
 
-So `CMBZ` in catalogue `4Y` could split as `CM`+`BZ` or `CMB`+`Z`, and longest
--prefix matching on the type alphabet alone is not sound. Tokenisation has to
-be resolved against the actual `(VMK_TYPE, VMK_COD)` pairs that exist for that
-catalogue — and whether _that_ is unambiguous everywhere is unmeasured.
+So splitting on the type alphabet alone is unsound. Splitting against the
+actual `(VMK_TYPE, VMK_COD)` pairs a catalogue holds **is** sound here, and
+that is a measurement rather than a hope: across all **4,241,952** token
+occurrences in the corpus, **0 split more than one way**.
 
-Type names also contain `/` and `_` (`A/T`, `C_LIN`), which is why those
-characters appear in the alphabet above and must not be read as operators.
+An earlier draft of this document called tokenisation "provably ambiguous" on
+the strength of the type collisions alone. That was wrong, and it was the more
+alarming version.
+
+**8,893 token occurrences (0.21%, 920 distinct) do not resolve at all** — a
+code a pattern names but the catalogue's vocabulary does not list, such as
+`CC1.3` in catalogue `10`. At pattern level that is 0.26% of `DRAWINGS`
+patterns, 0.17% of `TBDATA` formulas, 4.06% of `MVS` and 11.68% of `MDF_ACT`.
+These stay unresolved so that evaluation reports "unknown" rather than
+quietly false.
+
+### The two levels nest
+
+A drawing's pattern selects which vehicles see the diagram at all;
+`TBD_VAL_FORMULA` then discriminates between parts _on_ it. Drawing
+`33/101/1/20` variant 1 has `PATTERN = CC1.2+(CMBBZ,CMBBG)` and its callout 1
+offers two cylinder heads:
+
+```
+1.1  71740648  CYLINDER HEAD WITH VALVES COMPL   TBD_VAL_FORMULA = CMBBZ
+1.2  71751447  CYLINDER HEAD WITH VALVES         TBD_VAL_FORMULA = CMBBG
+```
+
+Any evaluator has to apply both levels.
+
+### Evaluation is three-valued
+
+An `MVS` row is one sold version of a vehicle, and its pattern is a flat
+conjunction stating what that version has and — with `!` — what it does not:
+`TC2V+CC1.4+KW88+CMBBZ+!XAC+011+!108+…`, typically 50 to 150 tokens. So an
+`MVS` pattern is a **specification** where a drawing's pattern is a **query**
+over one. All 36,332 parse, and 0 of them have a top-level disjunction, which
+is what makes reading them as a set of facts legitimate.
+
+A specification does not mention every criterion in its catalogue, and 0.21%
+of tokens do not resolve. Two-valued logic would have to guess on both, so
+evaluation is Kleene three-valued — true, false, unknown — and a caller can
+decline to answer rather than answer wrongly. In particular `!X` where `X` is
+unmentioned is **unknown**, not true.
+
+### Validated by reachability
+
+There is no external answer key for "which parts fit which car", so the
+grammar is checked against the data's own consistency. `MVS` lists every sold
+version, so a drawing whose pattern no version satisfies is a diagram nobody
+could ever be shown. `eperx applicability` measures it over all 223
+catalogues:
+
+| Can any version see this drawing? | Drawings |           |
+| --------------------------------- | -------- | --------- |
+| yes                               | 70,111   | 86.12%    |
+| undecided                         | 11,286   | 13.86%    |
+| **no**                            | **18**   | **0.02%** |
+
+18 unreachable drawings out of 81,415 is the result that makes the reading
+credible. A rise in that number is a regression.
+
+### What is still open
+
+- **`?`** — 3 `MVS` rows, meaning unknown.
+- **Precedence of `!` against an implicit AND.** `!407(CC1.8,CC2.0)` is read
+  as `(!407)+(CC1.8,CC2.0)`, the conventional binding for a prefix operator,
+  but `!(407+(…))` is also syntactically available and the two differ. 26
+  patterns have this shape.
+- **How several matching alternatives on one callout are resolved.** Strict
+  exclusivity is _not_ a property of the data: `10002-010` callout 1 offers
+  ten alternatives including `CC1.3+LL1` and `CC1.3+TT4X4`, and a 1.3 with
+  that trim and four-wheel drive satisfies both. Order almost certainly
+  decides it — **84,897 of the 84,902 multi-formula callouts give every row a
+  distinct `TBD_SEQ`** — but "first match wins" is inferred from the shape of
+  the data, not confirmed. Measured over the corpus, exactly one alternative
+  applies in 66.82% of cases, several in 11.02%, and none decidably in 22.13%.
+
+  Note that several rows under one callout with _no_ formula are a different
+  thing: parts fitted together, not a choice. 104,752 callouts look like that.
+
+- **39 malformed patterns** (0.036%): 29 with unbalanced parentheses
+  (`GS+(M1,M2,M3`) and the rest with a `!` that has nothing to negate
+  (`129!+5DE`). These are rejected rather than repaired — there is no way to
+  close a bracket for the vendor that is not a guess about which parts fit a
+  car.
 
 ## 6. Established by
 
-| Claim                     | How                                                                               |
-| ------------------------- | --------------------------------------------------------------------------------- |
-| Jet 4, no password        | page 0 magic and version byte; both files open in `mdb-reader` and `mdbtools`     |
-| Row and table counts      | counted, not estimated, on edition 83                                             |
-| Column types in use       | enumerated over all 77 tables of both databases                                   |
-| Drawing shards are stored | `compress_type` tallied over all 261 shards, 228,226 entries                      |
-| `IMG_PATH` layout         | `DRAWINGS` rows resolved to entries and extracted; PNGs decode at 2150×1675       |
-| Drawing↔parts key         | the `DRW_NUM` join returned zero rows; `TABLE_COD, VARIANTE` returns the callouts |
-| PATTERN alphabet          | distinct characters over all four PATTERN columns                                 |
-| PATTERN tokens            | joined against `CARAT_DSC` and `VMK_DSC` for `CAT_COD` `33`                       |
-| Tokenisation ambiguity    | self-join of `CARAT_DSC` for prefix pairs within a catalogue                      |
-| F3 magic and tables       | header hexdump of four files                                                      |
+| Claim                       | How                                                                                           |
+| --------------------------- | --------------------------------------------------------------------------------------------- |
+| Jet 4, no password          | page 0 magic and version byte; both files open in `mdb-reader` and `mdbtools`                 |
+| Row and table counts        | counted, not estimated, on edition 83                                                         |
+| Column types in use         | enumerated over all 77 tables of both databases                                               |
+| Drawing shards are stored   | `compress_type` tallied over all 261 shards, 228,226 entries                                  |
+| `IMG_PATH` layout           | `DRAWINGS` rows resolved to entries and extracted; PNGs decode at 2150×1675                   |
+| Drawing↔parts key           | the `DRW_NUM` join returned zero rows; `TABLE_COD, VARIANTE` returns the callouts             |
+| PATTERN grammar             | all 107,957 distinct patterns parsed; 39 fail, and `DRAWINGS` and `MVS` fail 0                |
+| PATTERN tokens              | all 4,241,952 occurrences split against each catalogue's real `(type, code)` pairs            |
+| Tokenisation is unambiguous | 0 of those 4,241,952 split two ways; the type collisions come from a self-join of `CARAT_DSC` |
+| Reachability                | every drawing pattern evaluated against every `MVS` of its catalogue — `eperx applicability`  |
+| F3 magic and tables         | header hexdump of four files                                                                  |
 
 ## 7. Prior work
 
@@ -332,9 +436,10 @@ Honest list, so nobody reports these as discoveries.
 - **`SP.CH` / `SP.TR` / `SP.RT` bodies.** The F3 header parses by eye; the
   block index and row layout are not implemented. `SP.RT`'s purpose is
   unknown — its tables (`RTM`, `MOD_TEL`, `CIS`, `ORDINE`) suggest ordering.
-- **`!`, `@` and `?` in patterns.** In the alphabet, meaning unconfirmed.
-- **Whether pattern tokenisation is ever genuinely ambiguous**, given the
-  prefix collisions in §5.
+- **`?` in patterns**, and the precedence of `!` against an implicit AND —
+  both in [§5](#what-is-still-open), which also records how several matching
+  alternatives on one callout are probably resolved (`TBD_SEQ` order) and why
+  that is not yet confirmed.
 - **`HOTSPOTS`.** A memo on `DRAWINGS`, `TBDATA`, `KIT` and `CPXDATA`, null on
   every row inspected so far. It should be what makes callouts clickable —
   openPER lists "find image maps for drawings" as an open task too.

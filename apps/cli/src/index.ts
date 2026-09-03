@@ -20,6 +20,7 @@ import {
   subgroups,
   whereUsed,
 } from "@eperx/catalogue";
+import { checkApplicability } from "./applicability.js";
 import { openCatalogue } from "./browse.js";
 import { openDisc } from "./disc.js";
 import { convertDatabase } from "./convert.js";
@@ -318,6 +319,67 @@ program
       if (usages.length > 15) console.log(chalk.dim(`  … and ${usages.length - 15} more`));
     } finally {
       cat.close();
+    }
+  });
+
+program
+  .command("applicability")
+  .description("check the PATTERN grammar against the disc's own consistency")
+  .requiredOption("-d, --data <dir>", "an imported tree")
+  .option("-c, --catalogue <cod>", "one catalogue, e.g. 33 (default: all 223)")
+  .action((options) => {
+    const db = new DatabaseSync(join(options.data, CATALOGUE_DB), { readOnly: true });
+    const started = Date.now();
+    try {
+      const r = checkApplicability(db, { catalogue: options.catalogue });
+      const pct = (n: number, of: number) => (of ? `${((n / of) * 100).toFixed(2)}%` : "—");
+
+      console.log(chalk.bold(`\n${r.catalogues} catalogue${r.catalogues === 1 ? "" : "s"}`));
+      console.log(
+        `  versions          ${r.versions.toLocaleString()} read, ` +
+          `${r.versionsParsed.toLocaleString()} parsed ` +
+          chalk.dim(`(${r.versionsWithDisjunction.toLocaleString()} had a disjunction ignored)`),
+      );
+      console.log(
+        `  drawings          ${r.drawings.toLocaleString()} with a pattern, ` +
+          `${r.drawingsParsed.toLocaleString()} parsed`,
+      );
+      console.log(chalk.bold("\n  reachability — can any version see this drawing?"));
+      console.log(
+        `    ${chalk.green("yes")}             ${r.reachable.toLocaleString().padStart(9)}  ${pct(r.reachable, r.drawingsParsed)}`,
+      );
+      console.log(
+        `    ${chalk.yellow("undecided")}       ${r.onlyUndecided.toLocaleString().padStart(9)}  ${pct(r.onlyUndecided, r.drawingsParsed)}`,
+      );
+      console.log(
+        `    ${chalk.red("no")}              ${r.unreachable.toLocaleString().padStart(9)}  ${pct(r.unreachable, r.drawingsParsed)}`,
+      );
+      console.log(
+        chalk.bold("\n  alternatives — how many apply at once? (a characterisation, not a check)"),
+      );
+      console.log(
+        `    exactly one     ${r.choicesSingle.toLocaleString().padStart(9)}  ${pct(r.choicesSingle, r.choices)}`,
+      );
+      console.log(
+        `    several         ${r.choicesMultiple.toLocaleString().padStart(9)}  ${pct(r.choicesMultiple, r.choices)}` +
+          chalk.dim("  → TBD_SEQ order decides"),
+      );
+      console.log(
+        `    undecided       ${r.choicesUndecided.toLocaleString().padStart(9)}  ${pct(r.choicesUndecided, r.choices)}`,
+      );
+
+      if (r.parseFailures) {
+        console.log(
+          chalk.bold(`\n  ${r.parseFailures.toLocaleString()} patterns failed to parse`) +
+            chalk.dim(` (showing ${r.parseErrors.length})`),
+        );
+        for (const e of r.parseErrors) {
+          console.log(`    ${chalk.red(e.message.padEnd(24))} ${chalk.dim(e.pattern)}`);
+        }
+      }
+      console.log(chalk.dim(`\n  ${((Date.now() - started) / 1000).toFixed(1)}s`));
+    } finally {
+      db.close();
     }
   });
 

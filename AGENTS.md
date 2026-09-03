@@ -15,6 +15,7 @@ pnpm typecheck    # NOT just `turbo run typecheck` — see below
 pnpm test
 node apps/cli/dist/index.js import <a mounted disc> -o /tmp/x -l 3 --no-images
 node apps/cli/dist/index.js browse -d /tmp/x -c 33 -g 101 -s 1
+node apps/cli/dist/index.js applicability -d /tmp/x
 ```
 
 `pnpm typecheck` is two things: `turbo run typecheck` over the packages via
@@ -31,6 +32,13 @@ SQL the browser runs, so a join that comes back empty shows up here in a
 second instead of as a blank panel in a screenshot. On edition 83 that command
 prints 13 drawings, the first being `CRANKCASE` `10101-010` variant 1 with six
 callouts.
+
+`applicability` is not optional if you touched `pattern.ts`. It parses all
+107,957 patterns and evaluates every drawing against every vehicle version of
+its catalogue. The numbers to match on edition 83: **39 patterns fail to
+parse** and **18 of 81,415 drawings are unreachable**. A rise in either is a
+regression, and the unreachable count is the only evidence this repo has that
+the grammar is read correctly.
 
 ## Do not reimplement other people's formats
 
@@ -138,16 +146,47 @@ it thinks need it from query history, and a fresh database has none. The
 resulting `sqlite_stat1` travels inside the file, so the browser plans the way
 this was tuned.
 
+## The applicability grammar has no answer key, so it is checked sideways
+
+There is no list of which parts fit which car to test against. What there is,
+is the data's own consistency: `MVS` lists every sold version of a vehicle, so
+a drawing whose pattern **no** version satisfies is a diagram nobody could ever
+be shown. 18 of 81,415 is credible; 8,000 would mean the evaluator is wrong.
+That is the whole safety net — treat it as such.
+
+Three rules follow from that:
+
+- **Three-valued logic is not decoration.** A version's pattern does not
+  mention every criterion, and 0.21% of tokens name a code the catalogue does
+  not list. `!X` where `X` is unmentioned is **unknown**, not true. Collapsing
+  to a boolean anywhere puts parts on cars.
+- **Malformed patterns are rejected, not repaired.** 39 of 107,957 have
+  unbalanced parentheses or a dangling `!`. Closing a bracket for the vendor
+  is guessing which parts fit.
+- **Do not claim exclusivity between a callout's alternatives.** It is not a
+  property of the data — `CC1.3+LL1` and `CC1.3+TT4X4` can both match. Order
+  (`TBD_SEQ`) almost certainly decides, but that is inferred, and the report
+  presents it as a characterisation rather than a check for that reason.
+
 ## Verify a test by breaking it
 
 A test that has never failed has not been shown to work. Change the code so the
 bug it describes is present, watch it fail with a message that names the
 problem, then restore.
 
-The load-bearing one here is "takes the data offset from the local header, not
-the central one". Making `resolvePayload` trust the central directory's extra
-length fails it with `expected 43 to be 49` — an off-by-six that would hand
-back bytes six into a PNG. Two traps found while doing this:
+Two load-bearing ones:
+
+- "takes the data offset from the local header, not the central one". Making
+  `resolvePayload` trust the central directory's extra length fails it with
+  `expected 43 to be 49` — an off-by-six that would hand back bytes six into a
+  PNG.
+- "requires adjacency for implicit AND, so free text stays an error". Letting
+  `parseConjunction` skip whitespace before testing adjacency fails that test
+  _and_ "refuses free text" — two failures, because whitespace would become a
+  separator and `NUOVA CENTRALINA CONTROLLO MOTORE` would parse into four
+  criteria.
+
+Traps found while doing this:
 
 - **Use absolute paths when you break and restore.** A `cd` in a compound
   shell command persists, so a restore can write to the wrong place and leave
@@ -230,12 +269,13 @@ is measured server-side by the dev middleware — set `EPERX_TRACE=1`, or read
 
 Honest list, so nobody reports these as discoveries.
 
-- **The `PATTERN` grammar is not verified.** This is the critical path: it
-  decides which parts fit which vehicle. `+`/`,`/`()` are established and
-  tokens are `VMK_TYPE || VMK_COD`, but `!`, `@` and `?` are unexplained and
-  **tokenisation is provably ambiguous** where type names collide (`CM` vs
-  `CMB` in catalogue `4Y`; `G` vs `GSS`; `C_LIN` vs `COLINT`). Until there are
-  known-answer tests there is no parts-by-vehicle view.
+- **No parts-by-vehicle view.** The `PATTERN` grammar is specified, tested and
+  validated by reachability (18 of 81,415 drawings unreachable), but the UI has
+  no vehicle picker, so nothing filters yet. Three things about the grammar
+  remain open and all are written down in
+  [`docs/data-format.md` §5](docs/data-format.md#what-is-still-open): `?`, the
+  precedence of `!` against an implicit AND, and how several matching
+  alternatives on one callout are resolved.
 - **No F3 reader**, so no VIN search. Header parses by eye only.
 - **`HOTSPOTS` is null on every row inspected**, so callouts are not clickable.
   openPER has the same gap.

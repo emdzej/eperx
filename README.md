@@ -29,7 +29,10 @@ Working today:
   browser run the same SQL.
 - `@eperx/res` — reader for the `images/*.res` drawing shards, over HTTP
   `Range`, a local file, or Node `fs`, behind one `read(pos, len)`.
-- `eperx` CLI — `disc`, `tables`, `import`, `browse`, `part`, `image`.
+- `@eperx/catalogue` also holds the `PATTERN` parser and its three-valued
+  evaluator, with 36 tests.
+- `eperx` CLI — `disc`, `tables`, `import`, `browse`, `part`,
+  `applicability`, `image`.
 - 55 tables and 8,534,325 rows understood, with the hierarchy, the description
   joins and the two schema traps documented.
 
@@ -41,13 +44,18 @@ In the browser, one whole session — connect, walk to a drawing, read its
 callouts, search a part number, list its 200 usages — costs **92 requests and
 597 kB of that 568 MB database**, or 0.11%, plus 49 kB for the drawing.
 
-**Not working yet:** the `PATTERN` grammar, which decides _which parts fit
-which vehicle_. It is characterised — `+` is AND, `,` is OR, `()` groups, and a
-token is a criteria type concatenated with its code — but tokenisation is
-provably ambiguous in some catalogues and there are no known-answer tests, so
-there is no parts-by-vehicle view. See
-[`docs/plan.md`](docs/plan.md) phase 3 and
-[`docs/data-format.md`](docs/data-format.md) §5.
+**The applicability grammar is cracked.** `PATTERN` decides which parts fit
+which vehicle, and it is now specified, implemented and validated: all 107,957
+distinct patterns parse bar 39 malformed ones, `DRAWINGS` and `MVS` parse at
+100%, and evaluation is three-valued so that "not known" is an answer rather
+than a guess. With no external answer key it is validated by reachability —
+`MVS` lists every sold version, so a drawing no version can see is dead data,
+and **18 of 81,415 drawings are unreachable (0.02%)**.
+
+**Not built yet:** a parts-by-vehicle view. The evaluator exists but the UI has
+no vehicle picker, so patterns are displayed verbatim and marked
+uninterpreted. See [`docs/data-format.md`](docs/data-format.md) §5 for the
+grammar and what is still open in it.
 
 ## Why the drawings need no conversion
 
@@ -151,6 +159,16 @@ node $cli browse -d data -c 33 -g 101             # its subgroups
 node $cli browse -d data -c 33 -g 101 -s 1        # drawings, with callouts
 node $cli part 55189942 -d data                   # a part, and what it fits
 ```
+
+### Check the applicability grammar
+
+```sh
+node $cli applicability -d data           # all 223 catalogues, ~30 s
+node $cli applicability -d data -c 33     # just one
+```
+
+It parses every pattern and reports how many drawings no vehicle version can
+reach. That number is the regression test for the grammar.
 
 ### Run the browser client
 

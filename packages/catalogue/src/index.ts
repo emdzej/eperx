@@ -29,3 +29,19 @@ export {
   type Usage,
 } from "./parts.js";
 export { languages, type Language } from "./meta.js";
+export {
+  criteriaIn,
+  evaluatePattern,
+  formatPattern,
+  parsePattern,
+  PatternError,
+  resolveCriterion,
+  resolvePattern,
+  specificationFrom,
+  Truth,
+  vocabularyKey,
+  type Criterion,
+  type Pattern,
+  type Specification,
+  type Vocabulary,
+} from "./pattern.js";
