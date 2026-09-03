@@ -7,4 +7,6 @@ dist/
 build/
 .turbo/
 *.log
+__pycache__/
+*.pyc
 *.tsbuildinfo
