@@ -12,8 +12,9 @@
     "typecheck": "svelte-check --tsconfig ./tsconfig.json"
   },
   "dependencies": {
+    "@eperx/catalogue": "workspace:*",
     "@eperx/core": "workspace:*",
-    "@eperx/res": "workspace:*"
+    "sqlite-wasm-http": "^1.2.0"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^5.0.0",

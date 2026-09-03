@@ -41,15 +41,27 @@ file to diff against.
 
 Measured on edition 83, English only:
 
-|                                         |                                 |
-| --------------------------------------- | ------------------------------- |
-| `catalogue.sqlite`, one language        | 536 MB                          |
-| rows, one language                      | 5,253,068 of 8,534,325          |
-| import time, catalogue                  | 43 s                            |
-| import time, catalogue + image index    | 97 s                            |
-| drawing shards                          | 5.07 GB, 228,226 entries        |
-| image index                             | 210,481 rows                    |
-| browser: open a shard, render a drawing | 4 requests, 118.9 kB of 18.8 MB |
+|                                      |                            |
+| ------------------------------------ | -------------------------- |
+| `catalogue.sqlite`, one language     | 567.8 MB, `page_size` 4096 |
+| rows, one language                   | 5,253,068 of 8,534,325     |
+| indexes                              | 41                         |
+| import time, catalogue               | 43 s                       |
+| import time, catalogue + image index | 97 s                       |
+| drawing shards                       | 5.07 GB, 228,226 entries   |
+| image index                          | 210,481 rows               |
+
+In the browser, against a real HTTP server, reading `catalogue.sqlite` over
+`Range` — cumulative, so the last row is the whole session:
+
+| After                                        | Requests | Bytes  |
+| -------------------------------------------- | -------- | ------ |
+| connect and list the marques                 | 17       | 97 kB  |
+| walk to a drawing and its callouts           | 71       | 377 kB |
+| search a part number and list its 200 usages | 92       | 597 kB |
+
+Plus one ranged request for the drawing itself: 49.3 kB out of an 18.8 MB
+shard. So the whole session costs **597 kB of a 567.8 MB database — 0.11%**.
 
 Language selection is the main lever: the per-language description tables are
 about 62% of all rows.
@@ -58,17 +70,62 @@ The image index exists because resolving a ZIP entry to its payload needs its
 local header read. Doing that in the browser costs an extra round trip per
 image; doing it once at import costs one row per entry.
 
+## Two measurements that changed the code
+
+**`LIKE 'prefix%'` cannot use an index.** SQLite's `case_sensitive_like`
+defaults to off, which makes `LIKE` case-insensitive and rules out a BINARY
+index; the planner reports `SCAN p` and reads all 1,415,102 rows of `PARTS`.
+Over HTTP that measured **786 requests and 126 MB for one part-number
+search**. Rewritten as `PRT_COD >= ? AND PRT_COD < ?` with the upper bound
+computed in JS, it plans as `SEARCH p USING COVERING INDEX` and the same
+search costs kilobytes. `prefixRange` in `@eperx/catalogue` computes the
+bound, and the comment there records why incrementing the last character is
+exact for this data.
+
+**Where-used needs a covering index, not a narrow one.** A part can appear on
+2,824 `TBDATA` rows, and with an index on `(PRT_COD)` alone each match costs a
+row fetch — 672 requests and 3.0 MB for one lookup. Widening the index to
+carry the nine columns the query returns drops that to **21 requests and
+220 kB**. It has to _replace_ the narrow index rather than sit beside it: with
+both present the planner picks the smaller one and fetches rows anyway.
+
+## Page size: 4096, against the library's advice
+
+`sqlite-wasm-http` recommends `page_size = 1024` and warns on every connect
+that ours is 4096. Measured, over the same session as above:
+
+| `page_size` | Requests | Bytes  | File     |
+| ----------- | -------- | ------ | -------- |
+| **4096**    | 92       | 597 kB | 567.8 MB |
+| 1024        | 149      | 350 kB | 588.2 MB |
+
+1 KB pages move 41% fewer bytes but need 62% more requests. The backend eperx
+uses is the **synchronous** one, which issues its reads one at a time, so the
+cost is roughly `requests × RTT + bytes / bandwidth` and the request term
+dominates at any realistic latency: at 50 ms RTT, 4 KB pages come out about a
+third faster despite transferring more. The library's advice most likely
+assumes the shared-cache backend, which can overlap requests — and that one
+needs the cross-origin isolation headers eperx deliberately does not require.
+
+Revisit this if the transport ever parallelises. Until then the warning in the
+console is expected and should not be "fixed".
+
 ## Phases
 
 **1. Read the disc.** Done. `eperx disc`, `eperx tables`, `eperx import`,
 `eperx image` work against a real DVD end to end — a `DRAWINGS` row resolves to
 a 2150×1675 PNG out of the vendor's own shard.
 
-**2. Browse it.** In progress. The browser client reads a shard over `Range`
-and renders a drawing, which proves the transport end to end — 118.9 kB of an
-18.8 MB archive. What it does not do yet is read `catalogue.sqlite`, so there
-is no hierarchy, no callout list and no part search in the UI. That needs a
-read-only SQLite VFS over `read(pos, len)`; everything below it already exists.
+**2. Browse it.** Done. The browser client walks
+`marque → model → catalogue → group → subgroup → drawing`, renders the
+diagram, lists its callouts with names and quantities, searches part numbers,
+and shows every drawing a part appears on with a click through to each. SQLite
+runs in a worker and reads the database over `Range`; the drawing comes
+straight out of the vendor's own shard.
+
+Not in the UI yet: cliches (`CLICHE` / `CPXDATA`), the graphical group
+selector (`MAP_*`), supersessions (the `replacements` query exists but nothing
+renders it), and the accessories catalogue.
 
 **3. Applicability.** Specify and verify the `PATTERN` grammar so parts can be
 filtered to a specific vehicle. This is the critical path and the one part that

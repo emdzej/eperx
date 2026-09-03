@@ -16,8 +16,12 @@ import MDBReader, { type Column, type ColumnType } from "mdb-reader";
  * them as keys; translating would add a layer to get wrong.
  */
 
-/** SQLite page size. Fixed at 4 KB because every read over HTTP is one page. */
-const PAGE_SIZE = 4096;
+/**
+ * SQLite page size. Every read over HTTP is one page, so this is the knob that
+ * trades request count against wasted bytes per request. Measured — see
+ * `docs/plan.md`.
+ */
+export const DEFAULT_PAGE_SIZE = 4096;
 
 /** Rows per `getData` call. Bounded so a 1.6M-row table is not materialised. */
 const CHUNK = 50_000;
@@ -40,6 +44,8 @@ export interface ConvertOptions {
   languages?: string[];
   /** Replace an existing target instead of refusing to run. */
   force?: boolean;
+  /** SQLite page size in bytes. Must be a power of two, 512..65536. */
+  pageSize?: number;
   onProgress?: (event: ConvertProgress) => void;
 }
 
@@ -75,7 +81,7 @@ export function convertDatabase(options: ConvertOptions): ConvertResult {
   // `page_size` must be set before anything is written. The rest are build-time
   // only: the file is read-only afterwards, so durability during the build
   // buys nothing and costs a great deal of time.
-  db.exec(`PRAGMA page_size = ${PAGE_SIZE}`);
+  db.exec(`PRAGMA page_size = ${options.pageSize ?? DEFAULT_PAGE_SIZE}`);
   db.exec("PRAGMA journal_mode = OFF");
   db.exec("PRAGMA synchronous = OFF");
 
@@ -145,7 +151,11 @@ export function convertDatabase(options: ConvertOptions): ConvertResult {
     result.tables.push({ name, rows: written, skipped });
   });
 
-  db.exec("PRAGMA optimize");
+  // ANALYZE, not `PRAGMA optimize`: optimize only analyses tables it believes
+  // need it based on query history, and a freshly built database has none. The
+  // resulting `sqlite_stat1` travels inside the file, so a browser reading it
+  // over HTTP gets the same query plans this was tuned against.
+  db.exec("ANALYZE");
   // Reclaims the space freed by a language filter and leaves the pages in
   // index order, which is what makes range reads sequential for a client.
   db.exec("VACUUM");

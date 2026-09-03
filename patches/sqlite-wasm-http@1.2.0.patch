@@ -1,0 +1,22 @@
+diff --git a/dist/index.js b/dist/index.js
+index 037ca0991c95fcafd1f503ecac8d221d0eb5cbb6..5d2f07bc638dd017d4b9a5de0af20bf0a327bc61 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -35,7 +35,7 @@ export function createSQLiteThread(options) {
+             },
+             worker: () => {
+                 try {
+-                    worker = new Worker(new URL('./sqlite-worker.js', import.meta.url));
++                    worker = new Worker(new URL('./sqlite-worker.js', import.meta.url), { type: 'module' });
+                     worker.onerror = (event) => console.error('Worker bootstrap failed', event);
+                     const backend = options === null || options === void 0 ? void 0 : options.http;
+                     // This is the SQLite worker green light
+@@ -103,7 +103,7 @@ export function createHttpBackend(options) {
+         };
+     }
+     let nextId = 1;
+-    const worker = new Worker(new URL('./vfs-http-worker.js', import.meta.url));
++    const worker = new Worker(new URL('./vfs-http-worker.js', import.meta.url), { type: 'module' });
+     worker.postMessage({ msg: 'init', options });
+     // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     const consumers = {};

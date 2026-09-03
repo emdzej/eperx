@@ -92,9 +92,34 @@ drawing → part`, with cliches hanging off individual parts.
 | Version       | `MVS`                | `CAT_COD, MOD_COD, MVS_*`    | 36,332           |
 | Applicability | `APPLICABILITY`      | `PRT_COD`                    | 1,219,221        |
 
+#### `MK_COD` and `MK2_COD` are not the same thing
+
 `MAKES` has six rows: `F` FIAT, `L` LANCIA, `R` ALFAROMEO, `T` LCV,
-`C` ABARTH, `E` CHRYSLER. `CATALOGUES.MK_COD` and `MK2_COD` differ — the
-second splits FIAT into commercial and non-commercial vehicles.
+`C` ABARTH, `E` CHRYSLER. `CATALOGUES` carries **two** make columns, and the
+distinction matters:
+
+- **`MK2_COD` is the marque.** It is what every level below keys off, and it is
+  what joins to `MAKES.MK_COD`.
+- **`MK_COD` is the parent brand** the marque is billed under.
+
+Measured on edition 83:
+
+| `MK_COD` | `MK2_COD` | `MAKES.MK_DSC` | Catalogues |
+| -------- | --------- | -------------- | ---------- |
+| `F`      | `F`       | FIAT           | 104        |
+| `R`      | `R`       | ALFAROMEO      | 48         |
+| `L`      | `L`       | LANCIA         | 41         |
+| `F`      | `T`       | LCV            | 25         |
+| `F`      | `C`       | ABARTH         | 5          |
+
+So LCV (Fiat Professional) and ABARTH are their own marques but are billed as
+FIAT. Joining `MAKES` on `MK_COD` — the obvious pairing of same-named
+columns — labels both of them "FIAT" and yields three identical rows in a make
+list. Join on `MK2_COD`.
+
+`E` CHRYSLER appears in `MAKES` with no catalogues on this disc; only the
+`SP.RTCHRY` VIN file mentions it. Deriving the make list from `CATALOGUES`
+rather than from `MAKES` keeps it out.
 
 `GROUPS.GRP_COD` is **TEXT** while `GROUPS_DSC.GRP_COD` is **INTEGER**. Joining
 them needs a cast, and SQLite will silently match nothing without one.
@@ -120,7 +145,15 @@ TBDATA     DRW_NUM=0  VARIANTE=2  REVISIONE=0  TABLE_COD='10101-010'  → 8 call
 ```
 
 Within a drawing, `TBD_RIF` is the callout number printed on the image and
-`TBD_SEQ` distinguishes several part numbers under one callout.
+`TBD_SEQ` distinguishes several part numbers under one callout. Verified
+against the rendered PNG: drawing `33/101/1/10` variant 1 has callouts 1–4,
+and the image carries exactly those four numbers.
+
+A callout's display name is assembled from two tables, not one:
+`CODES_DSC.CDS_DSC` via `TBDATA.CDS_COD` gives the name (`PLUG`, `DOWEL`,
+`SCREW`), and `DESC_AGG_DSC.DSC` via `TBDATA.TBD_AGG_DSC` gives a qualifier
+(`DIAM 14`). The qualifier is null on most rows, so a reader that uses only
+`TBD_AGG_DSC` shows a mostly nameless parts list.
 
 ### Descriptions are per language
 
@@ -197,6 +230,20 @@ known-answer tests.
 
 Patterns appear on `DRAWINGS.PATTERN` (81,415 of 114,259 drawings carry one),
 `MVS.PATTERN`, `MDF_ACT.PATTERN` and `TBDATA.TBD_VAL_FORMULA`.
+
+The two levels nest, and one worked example shows how. Drawing
+`33/101/1/20` variant 1 has `PATTERN = CC1.2+(CMBBZ,CMBBG)` — _the 1.2 engine,
+petrol or LPG_ — and within it callout 1 has two alternative cylinder heads:
+
+```
+1.1  71740648  CYLINDER HEAD WITH VALVES COMPL   TBD_VAL_FORMULA = CMBBZ
+1.2  71751447  CYLINDER HEAD WITH VALVES         TBD_VAL_FORMULA = CMBBG
+```
+
+So the drawing's pattern selects which vehicles see the diagram at all, and
+`TBD_VAL_FORMULA` then discriminates between parts _on_ it. Any evaluator has
+to apply both. This is also the shape of a good known-answer test: the two
+formulas partition the drawing's own pattern exactly.
 
 A pattern is a boolean expression over criteria:
 
@@ -297,5 +344,11 @@ Honest list, so nobody reports these as discoveries.
   mismatch shape as `GROUPS.GRP_COD`; not yet investigated.
 - **`images/` entries with no extension** (657 of them) and the `.db`/`.pptx`
   leftovers. Assumed to be vendor accidents; not verified.
-- **`SUBSYSTEM`, `ACTIVATIONS`, `TRANCHE`, `CODES_REC`, `PROMO_*`.** Read and
-  imported, semantics not worked out.
+- **`ACTIVATIONS`, `TRANCHE`, `CODES_REC`, `PROMO_*`.** Read and imported,
+  semantics not worked out.
+
+`SUBSYSTEM` came off this list: its six rows are the mechanical subsystems in
+Italian — `A` _appendice_, `C` _cambio_ (gearbox), `M` _motore_ (engine),
+`S` _sospensioni_, `T` _telaio_ (chassis), `Z` _carrozzeria_ (body). The row
+count coincidentally matches `MAKES`, which is misleading; the two are
+unrelated.

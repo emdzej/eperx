@@ -1,18 +1,31 @@
 <script lang="ts">
-  import EntryList from "./components/EntryList.svelte";
-  import OpenShard from "./components/OpenShard.svelte";
+  import Cascade from "./components/Cascade.svelte";
+  import Connect from "./components/Connect.svelte";
+  import DrawingView from "./components/DrawingView.svelte";
+  import PartResults from "./components/PartResults.svelte";
   import ThemeToggle from "./components/ThemeToggle.svelte";
   import Wordmark from "./components/Wordmark.svelte";
-  import { shard } from "./lib/shard.svelte";
+  import { browse, loadMakes, runSearch } from "./lib/browse.svelte";
+  import { setLanguage, stats, tree } from "./lib/tree.svelte";
 
-  // The point of the whole exercise, stated as a number: what fraction of the
-  // archive had to be transferred to show what is on screen.
-  const fetchedShare = $derived(
-    shard.totalBytes ? (shard.fetchedBytes / shard.totalBytes) * 100 : 0,
-  );
+  let query = $state("");
 
-  const kb = (n: number) => `${(n / 1024).toFixed(1)} kB`;
-  const mb = (n: number) => `${(n / 1e6).toFixed(1)} MB`;
+  // Part results take over the main pane while there are any; clearing the
+  // box returns to the drawing, so there is no mode to get stuck in.
+  const showingParts = $derived(browse.parts.length > 0);
+
+  async function search() {
+    if (query.trim()) await runSearch(query);
+    else browse.parts = [];
+  }
+
+  async function changeLanguage(code: string) {
+    setLanguage(code);
+    // Every label came from a per-language join, so the whole tree is stale.
+    await loadMakes();
+  }
+
+  const kb = (n: number) => `${(n / 1024).toFixed(0)} kB`;
 </script>
 
 <div class="flex h-full flex-col">
@@ -23,89 +36,89 @@
     <div class="flex-1 bg-accent-alt"></div>
   </div>
 
-  <header
-    class="flex shrink-0 items-center gap-3 border-b border-divider bg-surface px-4 py-2"
-  >
+  <header class="flex shrink-0 items-center gap-3 border-b border-divider bg-surface px-4 py-2">
     <Wordmark />
-    <span class="text-xs text-faint">ePER parts catalogue, client-side</span>
-    <div class="flex-1"></div>
-    {#if shard.name}
-      <span class="font-mono text-xs text-muted">{shard.name}</span>
-      <span class="text-xs text-faint">{mb(shard.totalBytes)}</span>
+    <span class="hidden text-xs text-faint sm:inline">ePER parts catalogue, client-side</span>
+
+    {#if tree.catalogue}
+      <div class="flex-1"></div>
+      <input
+        class="w-56 rounded border border-divider bg-base px-2 py-1 font-mono text-xs
+               outline-none focus:border-accent"
+        bind:value={query}
+        placeholder="part number"
+        onkeydown={(e) => e.key === "Enter" && search()}
+      />
+      <button
+        class="rounded px-2 py-1 text-xs text-muted transition-colors hover:bg-elevated
+               hover:text-foreground"
+        onclick={search}
+      >
+        Search
+      </button>
+
+      {#if tree.languages.length > 1}
+        <select
+          class="rounded border border-divider bg-base px-1 py-1 text-xs text-muted
+                 outline-none focus:border-accent"
+          value={tree.catalogue.language}
+          onchange={(e) => changeLanguage(e.currentTarget.value)}
+        >
+          {#each tree.languages as language (language.code)}
+            <option value={language.code}>{language.name}</option>
+          {/each}
+        </select>
+      {/if}
+    {:else}
+      <div class="flex-1"></div>
     {/if}
     <ThemeToggle />
   </header>
 
-  <main class="flex min-h-0 flex-1">
-    <aside class="flex w-96 shrink-0 flex-col border-r border-divider bg-surface">
-      <div class="border-b border-divider p-3">
-        <OpenShard />
-      </div>
-      <div class="min-h-0 flex-1">
-        <EntryList />
-      </div>
-    </aside>
-
-    <section class="flex min-w-0 flex-1 flex-col bg-base">
-      {#if shard.error}
-        <div
-          class="m-4 rounded border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger"
-        >
-          {shard.error}
+  {#if !tree.catalogue}
+    <main class="min-h-0 flex-1"><Connect /></main>
+  {:else}
+    <main class="flex min-h-0 flex-1 flex-col">
+      {#if showingParts}
+        <div class="flex min-h-0 flex-1"><PartResults /></div>
+      {:else}
+        <!-- Selectors across the top, diagram below. The cascade is five
+             levels wide and would otherwise leave the drawing a sliver. -->
+        <div class="flex h-64 shrink-0 border-b border-divider bg-surface">
+          <Cascade />
         </div>
+        <div class="flex min-h-0 flex-1"><DrawingView /></div>
       {/if}
 
-      <div class="flex min-h-0 flex-1 items-center justify-center p-4">
-        {#if shard.imageUrl}
-          <img
-            src={shard.imageUrl}
-            alt={shard.selected?.name ?? "drawing"}
-            class="max-h-full max-w-full object-contain"
-          />
-        {:else if shard.busy}
-          <p class="text-sm text-faint">Reading…</p>
-        {:else}
-          <div class="max-w-md space-y-3 text-center">
-            <p class="text-sm text-muted">
-              Open a drawing shard, then pick an entry.
-            </p>
-            <p class="text-xs text-faint">
-              The shards are ePER's own <span class="font-mono">images/*.res</span> archives,
-              unmodified. Every drawing in them is <em>stored</em> rather than deflated, so one
-              ranged read returns the PNG — the archive is never downloaded.
-            </p>
-          </div>
+      <footer
+        class="flex shrink-0 items-center gap-4 border-t border-divider bg-surface px-4 py-1
+               font-mono text-[11px]"
+      >
+        {#if browse.error}
+          <span class="text-danger">{browse.error}</span>
+        {:else if browse.busy}
+          <span class="text-faint">reading…</span>
+        {:else if browse.drawing}
+          <span class="text-muted">
+            {browse.catalogue?.code}/{browse.drawing.group}/{browse.drawing.subgroup}
+            · {browse.drawing.table} v{browse.drawing.variant}
+          </span>
         {/if}
-      </div>
-
-      {#if shard.selected}
-        <footer
-          class="grid shrink-0 grid-cols-4 gap-4 border-t border-divider bg-surface px-4 py-2
-                 font-mono text-xs"
-        >
-          <div>
-            <div class="text-faint">offset</div>
-            <div class="text-foreground">{shard.selected.offset.toLocaleString()}</div>
-          </div>
-          <div>
-            <div class="text-faint">length</div>
-            <div class="text-foreground">{kb(shard.selected.length)}</div>
-          </div>
-          <div>
-            <div class="text-faint">method</div>
-            <div class={shard.selected.method === 0 ? "text-ok" : "text-warn"}>
-              {shard.selected.method === 0 ? "stored" : "deflate"}
-            </div>
-          </div>
-          <div>
-            <div class="text-faint">transferred</div>
-            <div class="text-accent">
-              {kb(shard.fetchedBytes)}
-              <span class="text-faint">({fetchedShare.toFixed(2)}%)</span>
-            </div>
-          </div>
-        </footer>
-      {/if}
-    </section>
-  </main>
+        <div class="flex-1"></div>
+        <span class="text-faint">{tree.backend} backend</span>
+        <!-- Query count, not bytes: SQLite fetches its pages from inside a
+             worker, whose resource timings the main thread cannot see, so a
+             byte figure here would be a plausible-looking zero. The image is
+             read by our own code, so that one is real. -->
+        <span class="text-faint" title="SQL statements run against the tree">
+          {stats.queries} queries
+        </span>
+        {#if browse.imageBytes}
+          <span class="text-accent" title="The drawing itself, one ranged read">
+            img {kb(browse.imageBytes)}
+          </span>
+        {/if}
+      </footer>
+    </main>
+  {/if}
 </div>

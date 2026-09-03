@@ -3,11 +3,11 @@
 Scratch space. Nothing here is built or shipped, and most of it is
 git-ignored — see the repository's `.gitignore`.
 
-| Path | Tracked? | What goes in it |
-| --- | --- | --- |
-| `re/tools/` | yes | scripts worth keeping: probes, differential oracles |
-| `re/extract/` | **no** | anything unpacked from a disc or an installer |
-| `re/decompiled/` | **no** | `jadx` output from `classes.jar` |
+| Path             | Tracked? | What goes in it                                     |
+| ---------------- | -------- | --------------------------------------------------- |
+| `re/tools/`      | yes      | scripts worth keeping: probes, differential oracles |
+| `re/extract/`    | **no**   | anything unpacked from a disc or an installer       |
+| `re/decompiled/` | **no**   | `jadx` output from `classes.jar`                    |
 
 **Never commit anything derived from a disc.** Not a fixture, not a sample row,
 not a VIN. Tests use synthetic data built in the test file — see

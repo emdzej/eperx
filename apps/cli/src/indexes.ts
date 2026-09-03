@@ -29,7 +29,28 @@ export const CATALOGUE_INDEXES: Record<string, string[][]> = {
   // a table for display; `TBDATA.DRW_NUM` is 0 on the rows that belong to
   // them. Indexing by DRW_NUM produced an index that matched nothing, which
   // is how this was found.
-  TBDATA: [["CAT_COD", "TABLE_COD", "VARIANTE", "REVISIONE"], ["PRT_COD"]],
+  TBDATA: [
+    ["CAT_COD", "TABLE_COD", "VARIANTE", "REVISIONE"],
+    // Deliberately wide, and it *replaces* a bare ["PRT_COD"] rather than
+    // sitting beside it. "Which drawings show this part" is the flagship
+    // query, and a part can appear on 2,824 rows; with a narrow index each
+    // match costs a row fetch, which over HTTP measured 672 requests and
+    // 3.0 MB for one lookup. These columns make it covering, so the answer
+    // comes out of a contiguous run of index pages instead. Adding it
+    // alongside the narrow index does not work: the planner picks the smaller
+    // one and fetches rows anyway.
+    [
+      "PRT_COD",
+      "CAT_COD",
+      "GRP_COD",
+      "SGRP_COD",
+      "SGS_COD",
+      "TABLE_COD",
+      "VARIANTE",
+      "REVISIONE",
+      "TBD_RIF",
+    ],
+  ],
   PARTS: [["PRT_COD"]],
   APPLICABILITY: [["PRT_COD"], ["CAT_COD", "GRP_COD", "SGRP_COD"]],
   KIT: [["CAT_COD", "TABLE_COD", "VARIANTE", "REVISIONE"], ["PRT_COD"]],

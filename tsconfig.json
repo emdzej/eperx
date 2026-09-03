@@ -2,6 +2,7 @@
   "files": [],
   "references": [
     { "path": "./packages/core" },
+    { "path": "./packages/catalogue" },
     { "path": "./packages/res" },
     { "path": "./apps/cli" }
   ]

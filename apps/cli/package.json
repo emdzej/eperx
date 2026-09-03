@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@commander-js/extra-typings": "^15.0.0",
+    "@eperx/catalogue": "workspace:*",
     "@eperx/core": "workspace:*",
     "@eperx/res": "workspace:*",
     "chalk": "^6.0.0",

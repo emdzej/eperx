@@ -7,6 +7,20 @@ import { Command, Option } from "@commander-js/extra-typings";
 import chalk from "chalk";
 import MDBReader from "mdb-reader";
 import { parseImagePath } from "@eperx/core";
+import {
+  callouts,
+  catalogues,
+  drawings,
+  groups,
+  languages,
+  makes,
+  modelGroups,
+  replacements,
+  searchParts,
+  subgroups,
+  whereUsed,
+} from "@eperx/catalogue";
+import { openCatalogue } from "./browse.js";
 import { openDisc } from "./disc.js";
 import { convertDatabase } from "./convert.js";
 import { importImages } from "./images.js";
@@ -79,6 +93,17 @@ program
   .option("--no-images", "skip the drawing shards entirely")
   .option("--index-images-in-place", "index the shards where they are instead of copying 4.7 GB")
   .option("-f, --force", "replace an existing tree")
+  .option(
+    "--page-size <bytes>",
+    "SQLite page size; every browser read is one page (default 4096)",
+    (value) => {
+      const size = Number(value);
+      if (!Number.isInteger(size) || size < 512 || size > 65536 || size & (size - 1)) {
+        throw new Error(`page size must be a power of two between 512 and 65536, got ${value}`);
+      }
+      return size;
+    },
+  )
   .action(async (path, options) => {
     const disc = openDisc(path);
     const languages = options.languages?.split(",").map((s) => s.trim());
@@ -98,6 +123,7 @@ program
       indexes: CATALOGUE_INDEXES,
       languages,
       force: options.force,
+      pageSize: options.pageSize,
       onProgress: progress,
     });
     process.stderr.write("\r\x1b[K");
@@ -112,6 +138,7 @@ program
         indexes: ACCESSORIES_INDEXES,
         languages,
         force: options.force,
+        pageSize: options.pageSize,
         onProgress: progress,
       });
       process.stderr.write("\r\x1b[K");
@@ -164,6 +191,134 @@ program
     );
 
     console.log(`\ndone in ${((Date.now() - started) / 1000).toFixed(0)}s → ${options.out}`);
+  });
+
+program
+  .command("browse")
+  .description("walk an imported catalogue — the same queries the web app makes")
+  .requiredOption("-d, --data <dir>", "an imported tree")
+  .option("-l, --language <code>", "LNG_COD", "3")
+  .option("-c, --catalogue <cod>", "descend into one catalogue, e.g. 33")
+  .option("-g, --group <n>", "descend into one group, e.g. 101")
+  .option("-s, --subgroup <n>", "descend into one subgroup, and list its drawings")
+  .action(async (options) => {
+    const cat = openCatalogue(options.data, options.language);
+    try {
+      const langs = await languages(cat.rows);
+      console.log(
+        chalk.dim(`languages in this tree: ${langs.map((l) => `${l.code} ${l.name}`).join(", ")}`),
+      );
+
+      if (!options.catalogue) {
+        for (const make of await makes(cat)) {
+          console.log(
+            `${chalk.bold(make.name.padEnd(12))} ${chalk.dim(`MK2_COD ${make.code}`)}  ` +
+              `${make.catalogues} catalogues`,
+          );
+          for (const model of await modelGroups(cat, make.code)) {
+            console.log(`  ${model.code.padEnd(6)} ${model.name}`);
+          }
+        }
+        return;
+      }
+
+      if (!options.group) {
+        console.log(chalk.bold(`\ngroups in catalogue ${options.catalogue}`));
+        for (const group of await groups(cat, options.catalogue)) {
+          console.log(
+            `  ${String(group.code).padStart(4)}  ${(group.name ?? chalk.dim("(unnamed)")).padEnd(34)}` +
+              ` ${chalk.dim(`${group.subgroups} subgroups`)}`,
+          );
+        }
+        return;
+      }
+
+      if (!options.subgroup) {
+        console.log(chalk.bold(`\nsubgroups in ${options.catalogue}/${options.group}`));
+        for (const sub of await subgroups(cat, options.catalogue, Number(options.group))) {
+          console.log(
+            `  ${String(sub.code).padStart(4)}  ${(sub.name ?? chalk.dim("(unnamed)")).padEnd(34)}` +
+              ` ${chalk.dim(`${sub.drawings} drawings`)}`,
+          );
+        }
+        return;
+      }
+
+      const found = await drawings(
+        cat,
+        options.catalogue,
+        Number(options.group),
+        Number(options.subgroup),
+      );
+      for (const drawing of found) {
+        console.log(
+          `\n${chalk.bold(drawing.name ?? drawing.table)}  ` +
+            chalk.dim(`${drawing.table} variant ${drawing.variant} rev ${drawing.revision}`),
+        );
+        // Patterns are shown in the "unverified" colour on purpose: the
+        // grammar is characterised but not settled, so this is data the reader
+        // must interpret, not an answer the tool is giving.
+        if (drawing.pattern) console.log(`  pattern  ${chalk.yellow(drawing.pattern)}`);
+        if (drawing.image) console.log(`  image    ${drawing.image}`);
+        const items = await callouts(cat, drawing);
+        for (const item of items) {
+          const name = [item.name, item.qualifier].filter(Boolean).join(" ");
+          console.log(
+            `    ${String(item.reference).padStart(3)}.${item.sequence}  ` +
+              `${item.part.padEnd(12)} ${chalk.dim(`x${item.quantity ?? "?"}`.padEnd(6))} ${name}` +
+              (item.formula ? chalk.dim(`  [${item.formula}]`) : ""),
+          );
+        }
+        if (!items.length) console.log(chalk.dim("    no callouts"));
+      }
+    } finally {
+      cat.close();
+    }
+  });
+
+program
+  .command("part")
+  .description("look up a part number: what it is, what it fits, what replaced it")
+  .argument("<number>", "part number, or a prefix of one")
+  .requiredOption("-d, --data <dir>", "an imported tree")
+  .option("-l, --language <code>", "LNG_COD", "3")
+  .action(async (number, options) => {
+    const cat = openCatalogue(options.data, options.language);
+    try {
+      const found = await searchParts(cat, number);
+      if (!found.length) {
+        console.log(chalk.dim(`nothing starts with ${number}`));
+        return;
+      }
+      for (const part of found.slice(0, 10)) {
+        console.log(
+          `${chalk.bold(part.code.padEnd(14))} ${(part.name ?? chalk.dim("(unnamed)")).padEnd(28)}` +
+            chalk.dim(`${part.family ?? ""}`),
+        );
+      }
+      if (found.length > 10) console.log(chalk.dim(`… and ${found.length - 10} more`));
+
+      const exact = found.find((p) => p.code === number) ?? found[0]!;
+      const supersessions = await replacements(cat, exact.code);
+      if (supersessions.length) {
+        console.log(chalk.bold(`\nreplacements for ${exact.code}`));
+        for (const r of supersessions) {
+          console.log(`  ${r.from} → ${r.to}  ${chalk.dim(r.date ?? "")}`);
+        }
+      }
+
+      const usages = await whereUsed(cat, exact.code);
+      console.log(chalk.bold(`\n${exact.code} appears on ${usages.length} drawings`));
+      for (const use of usages.slice(0, 15)) {
+        console.log(
+          `  ${use.catalogue.padEnd(4)} ${use.catalogueName.padEnd(36)} ` +
+            chalk.dim(`${use.group}/${use.subgroup}  ${use.table}  ref ${use.reference}`),
+        );
+      }
+      if (usages.length > 15) console.log(chalk.dim(`  … and ${usages.length - 15} more`));
+    } finally {
+      cat.close();
+    }
   });
 
 program

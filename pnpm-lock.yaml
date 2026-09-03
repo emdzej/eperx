@@ -4,6 +4,11 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  sqlite-wasm-http@1.2.0:
+    hash: d8a8457ce44e88cb53bb1db2cad75fcca357a39b81560b3ac97938c2d9dd2c74
+    path: patches/sqlite-wasm-http@1.2.0.patch
+
 importers:
   .:
     devDependencies:
@@ -28,6 +33,9 @@ importers:
       "@commander-js/extra-typings":
         specifier: ^15.0.0
         version: 15.0.0(commander@15.0.0)
+      "@eperx/catalogue":
+        specifier: workspace:*
+        version: link:../../packages/catalogue
       "@eperx/core":
         specifier: workspace:*
         version: link:../../packages/core
@@ -50,12 +58,15 @@ importers:
 
   apps/web:
     dependencies:
+      "@eperx/catalogue":
+        specifier: workspace:*
+        version: link:../../packages/catalogue
       "@eperx/core":
         specifier: workspace:*
         version: link:../../packages/core
-      "@eperx/res":
-        specifier: workspace:*
-        version: link:../../packages/res
+      sqlite-wasm-http:
+        specifier: ^1.2.0
+        version: 1.2.0(patch_hash=d8a8457ce44e88cb53bb1db2cad75fcca357a39b81560b3ac97938c2d9dd2c74)
     devDependencies:
       "@sveltejs/vite-plugin-svelte":
         specifier: ^5.0.0
@@ -84,6 +95,12 @@ importers:
       vite:
         specifier: ^6.0.0
         version: 6.4.3(@types/node@22.20.1)(jiti@1.21.7)
+
+  packages/catalogue:
+    dependencies:
+      "@eperx/core":
+        specifier: workspace:*
+        version: link:../core
 
   packages/core: {}
 
@@ -1629,6 +1646,13 @@ packages:
         integrity: sha512-CdzqowRJCeLU72bHvWqwRBBlLcMEtIvGrlvef74kMnV2AolS9Y8xUv1I0U/MNAWMhBlKIoyuEgoJ0t/bbwHbLQ==,
       }
 
+  lru-cache@7.18.3:
+    resolution:
+      {
+        integrity: sha512-jumlc0BIUrS3qJGgIkWZsyfAM7NCWiBcCDhnd+3NNM5KbBmLTgHVfWBcg6W+rLUsIpzpERPsvwUP7CckAQSOoA==,
+      }
+    engines: { node: ">=12" }
+
   magic-string@0.30.21:
     resolution:
       {
@@ -1985,6 +2009,13 @@ packages:
         integrity: sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==,
       }
     engines: { node: ">=0.10.0" }
+
+  sqlite-wasm-http@1.2.0:
+    resolution:
+      {
+        integrity: sha512-mTZw4MHSw/dsO7PhAZeV14WIiVw/e8ECJSDV5oMEgInbCw+ITP/Y8YqbzggDiWRoPpbJ+uPoOXe5myIQbX6XxQ==,
+      }
+    engines: { node: ">=18.0.0" }
 
   stackback@0.0.2:
     resolution:
@@ -3064,6 +3095,8 @@ snapshots:
 
   loupe@3.2.1: {}
 
+  lru-cache@7.18.3: {}
+
   magic-string@0.30.21:
     dependencies:
       "@jridgewell/sourcemap-codec": 1.6.0
@@ -3267,6 +3300,10 @@ snapshots:
   siginfo@2.0.0: {}
 
   source-map-js@1.2.1: {}
+
+  sqlite-wasm-http@1.2.0(patch_hash=d8a8457ce44e88cb53bb1db2cad75fcca357a39b81560b3ac97938c2d9dd2c74):
+    dependencies:
+      lru-cache: 7.18.3
 
   stackback@0.0.2: {}
 

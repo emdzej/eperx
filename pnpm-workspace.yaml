@@ -6,3 +6,5 @@ packages:
 # Without this pnpm skips it and vitest fails at startup.
 onlyBuiltDependencies:
   - "esbuild"
+patchedDependencies:
+  sqlite-wasm-http@1.2.0: patches/sqlite-wasm-http@1.2.0.patch

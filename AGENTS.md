@@ -14,6 +14,7 @@ vehicle it does not fit, and nothing in a green test run will tell you.
 pnpm typecheck    # NOT just `turbo run typecheck` — see below
 pnpm test
 node apps/cli/dist/index.js import <a mounted disc> -o /tmp/x -l 3 --no-images
+node apps/cli/dist/index.js browse -d /tmp/x -c 33 -g 101 -s 1
 ```
 
 `pnpm typecheck` is two things: `turbo run typecheck` over the packages via
@@ -24,6 +25,12 @@ node apps/cli/dist/index.js import <a mounted disc> -o /tmp/x -l 3 --no-images
 An import against a real disc is not optional if you touched `apps/cli` or
 `packages/res`. The row counts it prints are the regression test: 55 tables and
 5,253,068 rows for English on edition 83.
+
+`browse` is not optional if you touched `@eperx/catalogue`. It runs the same
+SQL the browser runs, so a join that comes back empty shows up here in a
+second instead of as a blank panel in a screenshot. On edition 83 that command
+prints 13 drawings, the first being `CRANKCASE` `10101-010` variant 1 with six
+callouts.
 
 ## Do not reimplement other people's formats
 
@@ -87,10 +94,10 @@ output looks the same either way.
 - The index list is checked against the real schema. A renamed column fails the
   import instead of building an index that matches nothing.
 
-## Two schema traps that return zero rows
+## Schema traps that fail silently
 
-Both were found by running a query and getting nothing back, which is the only
-way they show up.
+Every one of these was found by running a query and getting a wrong or empty
+answer back, which is the only way they show up.
 
 - **`DRAWINGS`→`TBDATA` joins on `(CAT_COD, TABLE_COD, VARIANTE, REVISIONE)`,
   never on `DRW_NUM`.** The tables share a `DRW_NUM` column, which invites the
@@ -99,6 +106,37 @@ way they show up.
   `apps/cli/src/indexes.ts` was originally the wrong shape for this reason.
 - **`GROUPS.GRP_COD` is TEXT, `GROUPS_DSC.GRP_COD` is INTEGER.** Joining needs
   a cast and SQLite will not warn you.
+- **`MAKES` joins to `CATALOGUES.MK2_COD`, not `MK_COD`.** `MK2_COD` is the
+  marque; `MK_COD` is the parent brand it is billed under, and LCV and ABARTH
+  are both billed as FIAT. The same-named columns make the wrong join look
+  right, and it produces three rows labelled "FIAT" instead of five marques.
+- **A callout's name comes from `CODES_DSC` via `CDS_COD`.** `DESC_AGG_DSC`
+  via `TBD_AGG_DSC` is only a qualifier (`DIAM 14`) and is null on most rows,
+  so using it alone yields a mostly nameless parts list.
+
+## Query plans are part of the interface
+
+The database is read over HTTP a page at a time, so a bad plan is not slow —
+it is megabytes. Check `EXPLAIN QUERY PLAN` before adding a query; `SCAN` on
+anything large is a defect.
+
+Two that were already caught, both with numbers in
+[`docs/plan.md`](docs/plan.md):
+
+- **`LIKE 'prefix%'` does not use an index.** `case_sensitive_like` is off by
+  default, so `LIKE` is case-insensitive and no BINARY index applies. One part
+  search scanned all 1,415,102 rows of `PARTS`: **786 requests, 126 MB**. Use a
+  range (`>= ? AND < ?`); `prefixRange` computes the bound.
+- **Where-used needs its index to be covering.** With a narrow `(PRT_COD)`
+  index each of a part's up-to-2,824 matches costs a row fetch. Widening it
+  took one lookup from 672 requests / 3.0 MB to 21 / 220 kB. It must _replace_
+  the narrow index — with both present the planner picks the smaller one and
+  fetches rows anyway.
+
+`import` runs `ANALYZE`, not `PRAGMA optimize`: optimize only analyses tables
+it thinks need it from query history, and a fresh database has none. The
+resulting `sqlite_stat1` travels inside the file, so the browser plans the way
+this was tuned.
 
 ## Verify a test by breaking it
 
@@ -115,8 +153,41 @@ back bytes six into a PNG. Two traps found while doing this:
   shell command persists, so a restore can write to the wrong place and leave
   the broken code on disk.
 - **A background dev server does not survive between shell invocations.** Start
-  it and test it in the same command, and bind it explicitly — Vite reports
-  `localhost` but a request to `127.0.0.1` can still fail to connect.
+  it and test it in the same command, and bind it explicitly with
+  `--host 127.0.0.1` — Vite reports `localhost` but a request to `127.0.0.1`
+  can still fail to connect.
+- **Check that an edit applied.** `pnpm format` reflows these files, so an
+  exact-match edit written against remembered text silently matches nothing.
+  Two index changes were "made" and then found still absent from the built
+  output. Grep for the result.
+
+## The browser's SQLite is fussy, and three fixes are load-bearing
+
+- **`pool.exec` does not return rows.** It is typed `RowObject[]` but returns
+  worker-1 protocol _messages_ — `{ type, columnNames, rowNumber, row }` — with
+  the row nested inside. Treating the envelope as the row gives objects whose
+  every column is `undefined`, which renders as a list of blank entries rather
+  than an error. `rowsFrom` unwraps it.
+- **`sqlite-wasm-http` is patched.** It builds its workers with
+  `new Worker(url)` and no `{ type: "module" }`, which webpack rewrites and
+  Vite does not — in dev the worker loads as a classic script, hits an ES
+  `import`, and dies with "Worker bootstrap failed". The patch is in `patches/`
+  and registered in `pnpm-workspace.yaml`. Do not drop it.
+- **`optimizeDeps.exclude` and `worker.format: "es"` are both required.** The
+  pre-bundler rewrites the package's worker URLs and breaks them; the default
+  `iife` worker format cannot express the SQLite worker's code splitting and
+  fails the production build outright.
+
+The backend is pinned to `sync` deliberately. The shared-cache one needs
+`SharedArrayBuffer`, which needs COOP/COEP headers on the origin — and
+requiring those of whoever hosts the tree would undo the point of it being
+servable from anywhere.
+
+**Do not add a byte counter to the UI.** SQLite fetches its pages inside a
+worker, whose resource timings the main thread cannot see; an earlier version
+counted that way and reported a confident `0 kB` for every query. Page traffic
+is measured server-side by the dev middleware — set `EPERX_TRACE=1`, or read
+`/__eperx-traffic`.
 
 ## Things that are the way they are on purpose
 
@@ -169,11 +240,11 @@ Honest list, so nobody reports these as discoveries.
 - **`HOTSPOTS` is null on every row inspected**, so callouts are not clickable.
   openPER has the same gap.
 - **Only `packages/res` has tests.** Eight of them, on synthetic archives.
-  `apps/cli` has none, so the import against a real disc is its only
-  regression check and it is manual.
-- **The web app is a harness, not a product.** It reads a shard and renders a
-  drawing; it does not read `catalogue.sqlite` at all, so there is no
-  hierarchy, callout list or part search in the UI yet.
+  `@eperx/catalogue` and `apps/cli` have none: the SQL is checked by running
+  `eperx browse` and `eperx part` against a real tree, and that is manual.
+- **Not in the UI:** cliches (`CLICHE` / `CPXDATA`), the graphical group
+  selector (`MAP_*`), supersessions (the `replacements` query exists but
+  nothing renders it), and the accessories catalogue.
 - **Only tested against edition 83.** openPER targets 84 and documents
   differences; they are not reconciled.
 - **Only macOS has been used to mount the ISO.** The CLI takes a mount point

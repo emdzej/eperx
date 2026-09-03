@@ -20,18 +20,26 @@ converts in 97 seconds.
 
 Working today:
 
+- **A browser client that browses the catalogue.** Marque → model →
+  catalogue → group → subgroup → drawing, with the diagram, its callout list,
+  part-number search, and every drawing a part appears on. SQLite runs in a
+  worker and reads the database over `Range`; no backend, nothing downloaded
+  up front.
+- `@eperx/catalogue` — the queries, transport-agnostic, so the CLI and the
+  browser run the same SQL.
 - `@eperx/res` — reader for the `images/*.res` drawing shards, over HTTP
   `Range`, a local file, or Node `fs`, behind one `read(pos, len)`.
-- `eperx` CLI — `disc`, `tables`, `import`, `image`.
-- A browser client that opens a shard over `Range` and renders a drawing —
-  **118.9 kB transferred out of an 18.8 MB archive, 0.65%**, measured against
-  a real HTTP server.
-- 55 tables and 8,534,325 rows understood, with the hierarchy and the
-  description joins mapped.
+- `eperx` CLI — `disc`, `tables`, `import`, `browse`, `part`, `image`.
+- 55 tables and 8,534,325 rows understood, with the hierarchy, the description
+  joins and the two schema traps documented.
 
-Measured on edition 83: the English-only catalogue is **536 MB** and
+Measured on edition 83: the English-only catalogue is **568 MB** and
 **5,253,068 rows** with 41 indexes, built in **43 s**; indexing all
 **228,226** drawing entries across **261 shards** takes another **54 s**.
+
+In the browser, one whole session — connect, walk to a drawing, read its
+callouts, search a part number, list its 200 usages — costs **92 requests and
+597 kB of that 568 MB database**, or 0.11%, plus 49 kB for the drawing.
 
 **Not working yet:** the `PATTERN` grammar, which decides _which parts fit
 which vehicle_. It is characterised — `+` is AND, `,` is OR, `()` groups, and a
@@ -49,9 +57,9 @@ file itself — the shape of an HTTP `Range` request. So a static host serves th
 vendor's own `.res` files and the browser pulls one PNG out of a 19 MB archive
 with a single request. **4.7 GB of drawings pass through untouched.**
 
-Measured, opening shard `2E.res` (18.8 MB, 840 entries) and rendering one
-drawing: two requests and 69.5 kB for the central directory, then two more and
-49.3 kB for the PNG itself — **0.65% of the archive**.
+A drawing costs one request: the `images` table in the catalogue gives its
+byte range, so the browser fetches 49.3 kB out of an 18.8 MB shard and hands
+the bytes straight to a `<blob:>` image with nothing in between.
 
 The catalogue is the other half of the story: `SP.DB` is an Access database, so
 `eperx import` converts it to SQLite once, with indexes chosen for the queries
@@ -92,7 +100,7 @@ node $cli tables /Volumes/ePER\ ed.83 -b accessories
 # Everything, all 20 languages
 node $cli import /Volumes/ePER\ ed.83 -o data
 
-# English only, catalogue and drawings — 536 MB plus the shards
+# English only, catalogue and drawings — 568 MB plus the shards
 node $cli import /Volumes/ePER\ ed.83 -o data -l 3
 
 # Leave the 4.7 GB of shards on the disc and index them where they sit
@@ -131,20 +139,30 @@ Two joins to get right, both of which silently return nothing otherwise:
 INTEGER. Both are in
 [`docs/data-format.md` §2](docs/data-format.md#2-spdb-and-amdb--access-jet-4).
 
-### Run the browser client
+### Browse it in the CLI
 
-`pnpm dev` serves an imported tree — or a mounted disc's `data/` — at `/data`,
-honouring `Range`:
+The same queries the browser makes, against a local tree — which is how the
+SQL gets checked without a browser:
 
 ```sh
-EPERX_DATA="/Volumes/ePER ed.83/data" pnpm dev
+node $cli browse -d data                          # marques and their models
+node $cli browse -d data -c 33                    # groups in one catalogue
+node $cli browse -d data -c 33 -g 101             # its subgroups
+node $cli browse -d data -c 33 -g 101 -s 1        # drawings, with callouts
+node $cli part 55189942 -d data                   # a part, and what it fits
 ```
 
-Then open shard `2E` and pick an entry. The footer shows how many bytes were
-actually transferred, which is the claim above made checkable.
+### Run the browser client
+
+`pnpm dev` serves an imported tree at `/data`, honouring `Range`:
+
+```sh
+EPERX_DATA=./data pnpm dev
+```
 
 The client **rejects a host that ignores `Range`** rather than reading the
-wrong bytes out of a full-body response.
+wrong bytes out of a full-body response. The footer shows how many statements
+a click cost.
 
 | Script           | What it does                                          |
 | ---------------- | ----------------------------------------------------- |
@@ -162,6 +180,7 @@ apps/
   web        Svelte 5 + Vite browser client
 packages/
   core       shared types and the ByteSource primitive
+  catalogue  the queries: hierarchy, drawings, callouts, part search
   res        the drawing-shard reader
 docs/
 re/tools/    reverse-engineering scratch
