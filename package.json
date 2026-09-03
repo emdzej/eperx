@@ -9,6 +9,7 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "pnpm --filter @eperx/web dev",
+    "preview": "pnpm --filter @eperx/web preview",
     "cli": "node apps/cli/dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest",

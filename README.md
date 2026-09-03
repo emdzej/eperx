@@ -160,14 +160,20 @@ node $cli part 55189942 -d data                   # a part, and what it fits
 EPERX_DATA=./data pnpm dev
 ```
 
+`pnpm preview` takes the same variable and serves the production bundle, which
+is the closest thing to how this is actually deployed — same request counts,
+verified.
+
 The client **rejects a host that ignores `Range`** rather than reading the
 wrong bytes out of a full-body response. The footer shows how many statements
-a click cost.
+a click cost; the byte figures come from the dev server, which counts them
+(`EPERX_TRACE=1`, or read `/__eperx-traffic`).
 
 | Script           | What it does                                          |
 | ---------------- | ----------------------------------------------------- |
 | `pnpm build`     | Build every package and the web app                   |
 | `pnpm dev`       | Run the browser client (see `EPERX_DATA` above)       |
+| `pnpm preview`   | Serve the production bundle, same `EPERX_DATA`        |
 | `pnpm test`      | Unit tests                                            |
 | `pnpm typecheck` | Packages via `tsc`, the Svelte app via `svelte-check` |
 | `pnpm check`     | Build, typecheck and test                             |
