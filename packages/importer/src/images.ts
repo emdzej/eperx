@@ -1,9 +1,7 @@
-import { copyFileSync, mkdirSync, rmSync, statSync, symlinkSync } from "node:fs";
-import { basename, join } from "node:path";
-import { DatabaseSync } from "./sqlite.js";
 import { indexShard, SHARD_SUFFIX } from "@eperx/res";
 import { listShards } from "./disc.js";
-import { FileSource } from "./node-source.js";
+import type { SourceFs, TargetFs } from "./fs.js";
+import type { SqlWriter } from "./sql.js";
 
 /**
  * Import the drawing shards.
@@ -24,19 +22,18 @@ import { FileSource } from "./node-source.js";
  */
 
 export interface ImportImagesOptions {
-  /** `<mount>/data/images`. */
+  sourceFs: SourceFs;
+  /** `<disc>/data/images`, relative to the source root. */
   imagesDir: string;
-  /** Directory to place the shards in, or `undefined` to index in place. */
-  targetDir?: string;
   /**
-   * Symlink the shards instead of copying them.
+   * Where the shards go, or `undefined` to index them where they are.
    *
-   * The tree then needs the disc to stay mounted, but it costs nothing rather
-   * than 5 GB — which matters when the alternative is not importing at all.
+   * Indexing in place records byte ranges into files the tree does not
+   * contain, which only makes sense when something else will serve the disc.
    */
-  link?: boolean;
-  /** Catalogue database to write the `images` table into. */
-  catalogue: string;
+  target?: { fs: TargetFs; dir: string; mode: "copy" | "link" };
+  /** The catalogue database, to write the `images` table into. */
+  writer: SqlWriter;
   onProgress?: (event: { shard: string; index: number; count: number; entries: number }) => void;
 }
 
@@ -49,10 +46,10 @@ export interface ImportImagesResult {
 }
 
 export async function importImages(options: ImportImagesOptions): Promise<ImportImagesResult> {
-  const shards = listShards(options.imagesDir);
-  if (options.targetDir) mkdirSync(options.targetDir, { recursive: true });
+  const shards = await listShards(options.sourceFs, options.imagesDir);
+  if (options.target) await options.target.fs.mkdir(options.target.dir);
 
-  const db = new DatabaseSync(options.catalogue);
+  const db = options.writer;
   db.exec("PRAGMA journal_mode = OFF");
   db.exec("PRAGMA synchronous = OFF");
   // `entry` is the whole lookup key: `DRAWINGS.IMG_PATH` gives the shard too,
@@ -72,37 +69,39 @@ export async function importImages(options: ImportImagesOptions): Promise<Import
   const result: ImportImagesResult = { shards: 0, entries: 0, bytes: 0, deflated: 0 };
 
   for (const [index, name] of shards.entries()) {
-    const from = join(options.imagesDir, name);
-    const shard = basename(name, SHARD_SUFFIX);
-    const source = new FileSource(from);
-    let entries;
+    const shard = name.slice(0, name.length - SHARD_SUFFIX.length);
+    const file = await options.sourceFs.open(`${options.imagesDir}/${name}`);
     try {
-      entries = await indexShard(source);
+      const entries = await indexShard(file.source());
+
+      db.exec("BEGIN");
+      for (const entry of entries) {
+        insert.run([entry.name, shard, entry.offset, entry.length, entry.method, entry.size]);
+      }
+      db.exec("COMMIT");
+
+      if (options.target) {
+        const to = `${options.target.dir}/${name}`;
+        await options.target.fs.remove(to);
+        if (options.target.mode === "link") {
+          if (!options.target.fs.link) {
+            throw new Error("this target cannot link files, only copy them");
+          }
+          await options.target.fs.link(file, to);
+        } else {
+          await options.target.fs.copy(file, to);
+        }
+      }
+      result.shards++;
+      result.entries += entries.length;
+      result.deflated += entries.filter((e) => e.method !== 0).length;
+      result.bytes += file.size;
+      options.onProgress?.({ shard, index, count: shards.length, entries: entries.length });
     } finally {
-      source.close();
+      file.close();
     }
-
-    db.exec("BEGIN");
-    for (const entry of entries) {
-      insert.run(entry.name, shard, entry.offset, entry.length, entry.method, entry.size);
-    }
-    db.exec("COMMIT");
-
-    if (options.targetDir) {
-      const to = join(options.targetDir, name);
-      rmSync(to, { force: true });
-      if (options.link) symlinkSync(from, to);
-      else copyFileSync(from, to);
-    }
-
-    result.shards++;
-    result.entries += entries.length;
-    result.deflated += entries.filter((e) => e.method !== 0).length;
-    result.bytes += statSync(from).size;
-    options.onProgress?.({ shard, index, count: shards.length, entries: entries.length });
   }
 
-  db.exec("PRAGMA optimize");
-  db.close();
+  insert.finalize();
   return result;
 }

@@ -1,6 +1,6 @@
-import { existsSync, readFileSync, rmSync } from "node:fs";
-import { DatabaseSync } from "./sqlite.js";
 import MDBReader, { type Column, type ColumnType } from "mdb-reader";
+import type { JetBuffer } from "./jet.js";
+import type { SqlInput, SqlWriter } from "./sql.js";
 
 /**
  * Convert one of ePER's Jet 4 databases into SQLite.
@@ -14,6 +14,11 @@ import MDBReader, { type Column, type ColumnType } from "mdb-reader";
  * Table and column names are kept exactly as the disc spells them, Italian
  * abbreviations and all (`TBD_RIF`, `VMK_COD`, `SGRP_COD`). The data uses
  * them as keys; translating would add a layer to get wrong.
+ *
+ * This runs unchanged in a browser. `mdb-reader` publishes a browser build,
+ * and the only thing it wants is the whole database as one buffer — measured
+ * at 1.27 GB in, 1.2 GB peak, because the reader is a view over the buffer
+ * rather than a copy of it.
  */
 
 /**
@@ -30,10 +35,10 @@ const CHUNK = 50_000;
 const BATCH = 200_000;
 
 export interface ConvertOptions {
-  /** Path to the `.FCTLR` Jet database. */
-  source: string;
-  /** Path of the SQLite file to create. */
-  target: string;
+  /** The whole Jet database. See {@link JetBuffer} for why not `Uint8Array`. */
+  bytes: JetBuffer;
+  /** Where the rows go. */
+  writer: SqlWriter;
   /** Index definitions, keyed by table name. */
   indexes: Record<string, string[][]>;
   /**
@@ -42,8 +47,6 @@ export interface ConvertOptions {
    * every language.
    */
   languages?: string[];
-  /** Replace an existing target instead of refusing to run. */
-  force?: boolean;
   /** SQLite page size in bytes. Must be a power of two, 512..65536. */
   pageSize?: number;
   onProgress?: (event: ConvertProgress) => void;
@@ -66,17 +69,8 @@ export interface ConvertResult {
 const LANGUAGE_COLUMNS = ["LNG_COD", "LangCode"];
 
 export function convertDatabase(options: ConvertOptions): ConvertResult {
-  // Writing into an existing database fails on the first CREATE TABLE, which
-  // reads as a mysterious mid-import crash rather than "you already have one".
-  if (existsSync(options.target)) {
-    if (!options.force) {
-      throw new Error(`${options.target} already exists; pass --force to replace it`);
-    }
-    rmSync(options.target);
-  }
-
-  const reader = new MDBReader(readFileSync(options.source));
-  const db = new DatabaseSync(options.target);
+  const reader = new MDBReader(options.bytes as ConstructorParameters<typeof MDBReader>[0]);
+  const db = options.writer;
 
   // `page_size` must be set before anything is written. The rest are build-time
   // only: the file is read-only afterwards, so durability during the build
@@ -88,7 +82,7 @@ export function convertDatabase(options: ConvertOptions): ConvertResult {
   const names = reader.getTableNames().sort();
   const result: ConvertResult = { tables: [], indexes: 0 };
 
-  names.forEach((name, tableIndex) => {
+  for (const [tableIndex, name] of names.entries()) {
     const table = reader.getTable(name);
     const columns = table.getColumns();
     db.exec(createTableSql(name, columns));
@@ -115,7 +109,7 @@ export function convertDatabase(options: ConvertOptions): ConvertResult {
           db.exec("BEGIN");
           open = true;
         }
-        insert.run(...columns.map((c) => toSqlite(row[c.name])));
+        insert.run(columns.map((c) => toSqlite(row[c.name])));
         written++;
         if (written % BATCH === 0) {
           db.exec("COMMIT");
@@ -131,6 +125,7 @@ export function convertDatabase(options: ConvertOptions): ConvertResult {
       });
     }
     if (open) db.exec("COMMIT");
+    insert.finalize();
 
     for (const cols of options.indexes[name] ?? []) {
       // A renamed column would otherwise produce a syntactically valid
@@ -139,7 +134,7 @@ export function convertDatabase(options: ConvertOptions): ConvertResult {
         if (!columns.some((c) => c.name === col)) {
           throw new Error(
             `index on ${name}(${cols.join(", ")}) names column ${col}, ` +
-              `which this release does not have — update apps/cli/src/indexes.ts`,
+              `which this release does not have — update packages/importer/src/indexes.ts`,
           );
         }
       }
@@ -149,8 +144,20 @@ export function convertDatabase(options: ConvertOptions): ConvertResult {
     }
 
     result.tables.push({ name, rows: written, skipped });
-  });
+  }
 
+  return result;
+}
+
+/**
+ * Settle a freshly built database, once everything that writes to it has.
+ *
+ * Separate from {@link convertDatabase} because the drawing index goes into
+ * the same file afterwards, and both of these have to come last: `ANALYZE`
+ * would miss the `images` table and `VACUUM` would be undone by the writes
+ * that followed it.
+ */
+export function finaliseDatabase(db: SqlWriter): void {
   // ANALYZE, not `PRAGMA optimize`: optimize only analyses tables it believes
   // need it based on query history, and a freshly built database has none. The
   // resulting `sqlite_stat1` travels inside the file, so a browser reading it
@@ -159,8 +166,6 @@ export function convertDatabase(options: ConvertOptions): ConvertResult {
   // Reclaims the space freed by a language filter and leaves the pages in
   // index order, which is what makes range reads sequential for a client.
   db.exec("VACUUM");
-  db.close();
-  return result;
 }
 
 function createTableSql(name: string, columns: Column[]): string {
@@ -201,7 +206,7 @@ function sqliteType(type: ColumnType): string {
   }
 }
 
-function toSqlite(value: unknown): string | number | bigint | null | Uint8Array {
+function toSqlite(value: unknown): SqlInput {
   if (value === null || value === undefined) return null;
   if (value instanceof Date) return value.toISOString();
   if (value instanceof Uint8Array) return value;

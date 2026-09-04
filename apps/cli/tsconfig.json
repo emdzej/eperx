@@ -2,5 +2,11 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": { "composite": true, "outDir": "dist", "rootDir": "src" },
   "include": ["src/**/*"],
-  "references": [{ "path": "../../packages/core" }, { "path": "../../packages/res" }]
+  "references": [
+    { "path": "../../packages/catalogue" },
+    { "path": "../../packages/core" },
+    { "path": "../../packages/importer" },
+    { "path": "../../packages/ktd" },
+    { "path": "../../packages/res" }
+  ]
 }

@@ -15,6 +15,7 @@
     "@eperx/catalogue": "workspace:*",
     "@eperx/core": "workspace:*",
     "@eperx/ktd": "workspace:*",
+    "@sqlite.org/sqlite-wasm": "3.53.0-build1",
     "sqlite-wasm-http": "^1.2.0"
   },
   "devDependencies": {

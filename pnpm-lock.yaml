@@ -15,6 +15,9 @@ importers:
       "@types/node":
         specifier: ^22.13.1
         version: 22.20.1
+      playwright:
+        specifier: ^1.62.1
+        version: 1.62.1
       prettier:
         specifier: ^3.5.1
         version: 3.9.6
@@ -39,6 +42,9 @@ importers:
       "@eperx/core":
         specifier: workspace:*
         version: link:../../packages/core
+      "@eperx/importer":
+        specifier: workspace:*
+        version: link:../../packages/importer
       "@eperx/ktd":
         specifier: workspace:*
         version: link:../../packages/ktd
@@ -70,6 +76,9 @@ importers:
       "@eperx/ktd":
         specifier: workspace:*
         version: link:../../packages/ktd
+      "@sqlite.org/sqlite-wasm":
+        specifier: 3.53.0-build1
+        version: 3.53.0-build1
       sqlite-wasm-http:
         specifier: ^1.2.0
         version: 1.2.0(patch_hash=d8a8457ce44e88cb53bb1db2cad75fcca357a39b81560b3ac97938c2d9dd2c74)
@@ -109,6 +118,18 @@ importers:
         version: link:../core
 
   packages/core: {}
+
+  packages/importer:
+    dependencies:
+      "@eperx/core":
+        specifier: workspace:*
+        version: link:../core
+      "@eperx/res":
+        specifier: workspace:*
+        version: link:../res
+      mdb-reader:
+        specifier: ^3.2.0
+        version: 3.2.0
 
   packages/ktd:
     dependencies:
@@ -867,6 +888,13 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  "@sqlite.org/sqlite-wasm@3.53.0-build1":
+    resolution:
+      {
+        integrity: sha512-PfWPWN2n+/37doa8oh2/oUXk4OOsRYZsxc1W1sDXIGb/Pu5Yrb+f2eyYpgQMGITVX7HVgxhs9P18Rc6I97ym/g==,
+      }
+    engines: { node: ">=22" }
+
   "@sveltejs/acorn-typescript@1.0.13":
     resolution:
       {
@@ -1470,6 +1498,14 @@ packages:
         integrity: sha512-1X1NTtiJphryn/uLQz3whtY6jK3fTqoE3ohKs0tT+Ujr1W59oopxmoEh7Lu5p6vBaPbgoM0bzveAW4Qi5RyWDQ==,
       }
 
+  fsevents@2.3.2:
+    resolution:
+      {
+        integrity: sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==,
+      }
+    engines: { node: ^8.16.0 || ^10.6.0 || >=11.0.0 }
+    os: [darwin]
+
   fsevents@2.3.3:
     resolution:
       {
@@ -1830,6 +1866,22 @@ packages:
         integrity: sha512-TfySrs/5nm8fQJDcBDuUng3VOUKsd7S+zqvbOTiGXHfxX4wK31ard+hoNuvkicM/2YFzlpDgABOevKSsB4G/FA==,
       }
     engines: { node: ">= 6" }
+
+  playwright-core@1.62.1:
+    resolution:
+      {
+        integrity: sha512-wPYSwEBJY9GHraISXqyqtx0na0LpO3XEX7jNDhntbex7tzUS7kLnZsOlFruFJB4Hi/rhDMjXGqHewDZ68nYZVw==,
+      }
+    engines: { node: ">=20" }
+    hasBin: true
+
+  playwright@1.62.1:
+    resolution:
+      {
+        integrity: sha512-0M+L3LAD8/nm554LOla9Ayx0j0tmFZ0FBcoQ7F1VuVHpM/XpiC8RcDzBQB8W5+hA8L22THxELzeF+2WcUzvcLg==,
+      }
+    engines: { node: ">=20" }
+    hasBin: true
 
   possible-typed-array-names@1.1.0:
     resolution:
@@ -2640,6 +2692,8 @@ snapshots:
   "@rollup/rollup-win32-x64-msvc@4.63.1":
     optional: true
 
+  "@sqlite.org/sqlite-wasm@3.53.0-build1": {}
+
   "@sveltejs/acorn-typescript@1.0.13(acorn@8.18.0)":
     dependencies:
       acorn: 8.18.0
@@ -3022,6 +3076,9 @@ snapshots:
 
   fraction.js@5.3.4: {}
 
+  fsevents@2.3.2:
+    optional: true
+
   fsevents@2.3.3:
     optional: true
 
@@ -3187,6 +3244,14 @@ snapshots:
   picomatch@4.0.7: {}
 
   pirates@4.0.7: {}
+
+  playwright-core@1.62.1: {}
+
+  playwright@1.62.1:
+    dependencies:
+      playwright-core: 1.62.1
+    optionalDependencies:
+      fsevents: 2.3.2
 
   possible-typed-array-names@1.1.0: {}
 

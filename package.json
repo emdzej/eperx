@@ -24,6 +24,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.13.1",
+    "playwright": "^1.62.1",
     "prettier": "^3.5.1",
     "turbo": "^2.8.10",
     "typescript": "^5.7.3",

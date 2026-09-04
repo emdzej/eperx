@@ -1,13 +1,5 @@
 #!/usr/bin/env node
-import {
-  copyFileSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  statSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { inflateRawSync } from "node:zlib";
 import { basename, join } from "node:path";
 import { DatabaseSync } from "./sqlite.js";
@@ -32,16 +24,21 @@ import { checkApplicability } from "./applicability.js";
 import { serve } from "./serve.js";
 import { lookupVehicle } from "./vin.js";
 import { openCatalogue } from "./browse.js";
-import { openDisc } from "./disc.js";
-import { convertDatabase } from "./convert.js";
-import { importImages } from "./images.js";
-import { ACCESSORIES_INDEXES, CATALOGUE_INDEXES } from "./indexes.js";
+import {
+  ACCESSORIES_DB,
+  ACCESSORIES_INDEXES,
+  buildManifest,
+  CATALOGUE_DB,
+  CATALOGUE_INDEXES,
+  convertDatabase,
+  finaliseDatabase,
+  importImages,
+  MANIFEST,
+  openDisc,
+} from "@eperx/importer";
+import { NodeSourceFs, NodeTargetFs, openNodeSqlWriter } from "./node-fs.js";
 import { F3Table } from "@eperx/ktd";
 import { FileSource } from "./node-source.js";
-
-const CATALOGUE_DB = "catalogue.sqlite";
-const ACCESSORIES_DB = "accessories.sqlite";
-const MANIFEST = "manifest.json";
 
 const program = new Command("eperx")
   .description("ePER disc tooling — inspect the databases, build a tree the browser can read")
@@ -51,10 +48,10 @@ program
   .command("disc")
   .description("report what an ePER disc carries")
   .argument("<disc>", "mounted disc, or its data directory")
-  .action((path) => {
-    const disc = openDisc(path);
+  .action(async (path) => {
+    const disc = await openDisc(new NodeSourceFs(path));
     console.log(`${chalk.bold("ePER")} ${disc.version}  release ${disc.release}`);
-    console.log(`  ${"data".padEnd(12)} ${disc.dataDir}`);
+    console.log(`  ${"data".padEnd(12)} ${join(path, disc.dataDir)}`);
     for (const [key, value] of Object.entries(disc.files)) {
       console.log(`  ${key.padEnd(12)} ${value ?? chalk.dim("absent")}`);
     }
@@ -69,13 +66,18 @@ program
       .choices(["spare-parts", "accessories"] as const)
       .default("spare-parts" as const),
   )
-  .action((path, options) => {
-    const disc = openDisc(path);
+  .action(async (path, options) => {
+    const sourceFs = new NodeSourceFs(path);
+    const disc = await openDisc(sourceFs);
     const file =
       options.database === "accessories" ? disc.files.accessories : disc.files.spareParts;
     if (!file) throw new Error(`this disc has no ${options.database} database`);
 
-    const reader = new MDBReader(readFileSync(file));
+    const handle = await sourceFs.open(file);
+    const reader = new MDBReader(
+      (await handle.bytes()) as ConstructorParameters<typeof MDBReader>[0],
+    );
+    handle.close();
     let total = 0;
     for (const name of reader.getTableNames().sort()) {
       const table = reader.getTable(name);
@@ -123,9 +125,11 @@ program
     },
   )
   .action(async (path, options) => {
-    const disc = openDisc(path);
+    const sourceFs = new NodeSourceFs(path);
+    const disc = await openDisc(sourceFs);
     const languages = options.languages?.split(",").map((s) => s.trim());
     mkdirSync(options.out, { recursive: true });
+    const targetFs = new NodeTargetFs(options.out);
 
     if (!disc.files.spareParts) throw new Error("this disc has no spare-parts database");
 
@@ -133,32 +137,58 @@ program
     console.log(chalk.bold(`ePER ${disc.version}, release ${disc.release}`));
     if (languages) console.log(`languages: ${languages.join(", ")}`);
 
-    const catalogue = join(options.out, CATALOGUE_DB);
+    // Writing into an existing database fails on the first CREATE TABLE, which
+    // reads as a mysterious mid-import crash rather than "you already have
+    // one". Checked here rather than in the importer, because whether a target
+    // may be clobbered is a matter for whoever owns the target.
+    const replaceable = (name: string) => {
+      const full = join(options.out, name);
+      if (!existsSync(full)) return full;
+      if (!options.force) {
+        throw new Error(`${full} already exists; pass --force to replace it`);
+      }
+      rmSync(full);
+      return full;
+    };
+
     console.log(`\n${chalk.bold("catalogue")} → ${CATALOGUE_DB}`);
-    const spare = convertDatabase({
-      source: disc.files.spareParts,
-      target: catalogue,
-      indexes: CATALOGUE_INDEXES,
-      languages,
-      force: options.force,
-      pageSize: options.pageSize,
-      onProgress: progress,
-    });
+    const catalogueWriter = openNodeSqlWriter(replaceable(CATALOGUE_DB));
+    const spareFile = await sourceFs.open(disc.files.spareParts);
+    let spare;
+    try {
+      spare = convertDatabase({
+        bytes: await spareFile.bytes(),
+        writer: catalogueWriter,
+        indexes: CATALOGUE_INDEXES,
+        languages,
+        pageSize: options.pageSize,
+        onProgress: progress,
+      });
+    } finally {
+      spareFile.close();
+    }
     process.stderr.write("\r\x1b[K");
     report(spare);
 
     let accessories;
     if (options.accessories && disc.files.accessories) {
       console.log(`\n${chalk.bold("accessories")} → ${ACCESSORIES_DB}`);
-      accessories = convertDatabase({
-        source: disc.files.accessories,
-        target: join(options.out, ACCESSORIES_DB),
-        indexes: ACCESSORIES_INDEXES,
-        languages,
-        force: options.force,
-        pageSize: options.pageSize,
-        onProgress: progress,
-      });
+      const writer = openNodeSqlWriter(replaceable(ACCESSORIES_DB));
+      const file = await sourceFs.open(disc.files.accessories);
+      try {
+        accessories = convertDatabase({
+          bytes: await file.bytes(),
+          writer,
+          indexes: ACCESSORIES_INDEXES,
+          languages,
+          pageSize: options.pageSize,
+          onProgress: progress,
+        });
+      } finally {
+        file.close();
+      }
+      finaliseDatabase(writer);
+      await writer.finish();
       process.stderr.write("\r\x1b[K");
       report(accessories);
     }
@@ -168,10 +198,12 @@ program
       const copying = !options.indexImagesInPlace;
       console.log(`\n${chalk.bold("drawings")} ${copying ? "→ images/" : "(indexed in place)"}`);
       images = await importImages({
+        sourceFs,
         imagesDir: disc.files.imagesDir,
-        targetDir: copying ? join(options.out, "images") : undefined,
-        link: options.link,
-        catalogue,
+        target: copying
+          ? { fs: targetFs, dir: "images", mode: options.link ? "link" : "copy" }
+          : undefined,
+        writer: catalogueWriter,
         onProgress: ({ shard, index, count }) => {
           process.stderr.write(`\r\x1b[K  ${shard}  ${index + 1}/${count}`);
         },
@@ -192,52 +224,53 @@ program
     let chassis;
     if (options.chassis && (disc.files.chassis || disc.files.build)) {
       console.log(`\n${chalk.bold("chassis")} → chassis/`);
-      mkdirSync(join(options.out, "chassis"), { recursive: true });
+      await targetFs.mkdir("chassis");
       chassis = {} as Record<string, string>;
       for (const [key, from] of [
         ["chassis", disc.files.chassis],
         ["build", disc.files.build],
       ] as const) {
         if (!from) continue;
-        const name = basename(from);
-        const to = join(options.out, "chassis", name);
-        rmSync(to, { force: true });
-        if (options.link) symlinkSync(from, to);
-        else copyFileSync(from, to);
-        chassis[key] = name;
-        console.log(
-          `  ${name}  ${(statSync(from).size / 1e6).toFixed(0)} MB` +
-            (options.link ? chalk.dim(" (linked)") : ""),
-        );
+        const file = await sourceFs.open(from);
+        try {
+          const to = `chassis/${file.name}`;
+          await targetFs.remove(to);
+          if (options.link) await targetFs.link(file, to);
+          else await targetFs.copy(file, to);
+          chassis[key] = file.name;
+          console.log(
+            `  ${file.name}  ${(file.size / 1e6).toFixed(0)} MB` +
+              (options.link ? chalk.dim(" (linked)") : ""),
+          );
+        } finally {
+          file.close();
+        }
       }
     }
 
-    writeFileSync(
-      join(options.out, MANIFEST),
+    // Last, because the drawing index went into the same file and both
+    // ANALYZE and VACUUM have to see everything.
+    finaliseDatabase(catalogueWriter);
+    await catalogueWriter.finish();
+
+    await targetFs.writeText(
+      MANIFEST,
       JSON.stringify(
-        {
-          eper: { version: disc.version, release: disc.release },
+        buildManifest({
+          version: disc.version,
+          release: disc.release,
           importedAt: new Date().toISOString(),
-          languages: languages ?? "all",
-          catalogue: { file: CATALOGUE_DB, tables: spare.tables.length, indexes: spare.indexes },
-          accessories: accessories && {
-            file: ACCESSORIES_DB,
-            tables: accessories.tables.length,
-          },
+          languages,
+          catalogue: { tables: spare.tables.length, indexes: spare.indexes },
+          accessories: accessories && { tables: accessories.tables.length },
           images: images && {
             dir: options.indexImagesInPlace ? null : "images",
             shards: images.shards,
             entries: images.entries,
           },
-          // Named in the manifest because the filenames carry the release
-          // number, so a client cannot guess them.
-          chassis: chassis && { dir: "chassis", files: chassis },
-          // Recorded because it decides which sources can read this tree: a
-          // browser reading a folder the user picked will not follow a symlink
-          // out of that folder, so a linked tree is HTTP-only. The client says
-          // so up front rather than letting every drawing 404.
-          linked: options.link ? true : undefined,
-        },
+          chassis,
+          linked: options.link,
+        }),
         null,
         2,
       ) + "\n",
@@ -462,10 +495,11 @@ program
   .option("-m, --model <cod>", "MOD_COD, when you have no VIN")
   .option("-c, --chassis <number>", "chassis number, when you have no VIN")
   .action(async (vin, options) => {
-    const disc = openDisc(options.disc);
+    const discFs = new NodeSourceFs(options.disc);
+    const disc = await openDisc(discFs);
     const db = new DatabaseSync(join(options.data, CATALOGUE_DB), { readOnly: true });
     try {
-      const found = await lookupVehicle(disc, db, {
+      const found = await lookupVehicle(discFs, disc, db, {
         vin,
         model: options.model,
         chassis: options.chassis,
