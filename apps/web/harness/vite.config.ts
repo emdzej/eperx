@@ -1,4 +1,5 @@
 import { fileURLToPath } from "node:url";
+import { svelte } from "@sveltejs/vite-plugin-svelte";
 import { defineConfig } from "vite";
 import base from "../vite.config";
 
@@ -13,8 +14,17 @@ export default defineConfig({
   ...base,
   root: fileURLToPath(new URL(".", import.meta.url)),
   base: "/",
-  plugins: [],
+  // Svelte, because `wizard.html` mounts a real component; the app's own
+  // plugin list also carries the `/data` dev middleware, which is not wanted
+  // here.
+  plugins: [svelte()],
   build: {
+    rollupOptions: {
+      input: {
+        index: fileURLToPath(new URL("index.html", import.meta.url)),
+        wizard: fileURLToPath(new URL("wizard.html", import.meta.url)),
+      },
+    },
     ...(typeof base === "object" && "build" in base ? base.build : {}),
     outDir: fileURLToPath(new URL("../dist-harness", import.meta.url)),
     emptyOutDir: true,

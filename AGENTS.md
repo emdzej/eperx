@@ -321,6 +321,62 @@ The general rule this is an instance of: **the local sources need a
 self-contained tree.** Anything that makes the tree cheaper by pointing outside
 it buys that saving with the folder and browser-storage modes.
 
+## The importer has two homes, and neither owns the filesystem
+
+`@eperx/importer` holds every piece of format knowledge and none of the I/O. It
+talks to a `SourceFs`/`TargetFs` and a small `SqlWriter`; `apps/cli/src/node-fs.ts`
+and `apps/web/src/lib/browser-fs.ts` supply one implementation each. Add
+format knowledge to the package, never to either adapter — the whole point is
+that there is one copy of it.
+
+Every path the importer sees is **relative and `/`-separated**, rooted at the
+disc or at the tree. It never sees an absolute path, because a browser has none
+to give: a folder the user picked is a handle, not a location. `SourceFile`
+carries an optional `nativePath` as the one escape hatch, and `--link` is its
+only caller.
+
+Three things about it are easy to get wrong:
+
+- **`convertDatabase` does not finish the database.** The drawing index goes
+  into the same file afterwards, and `ANALYZE` and `VACUUM` both have to come
+  last or they miss the `images` table. That is `finaliseDatabase`, then
+  `writer.finish()`.
+- **`SourceFile.bytes()` returns a `JetBuffer`, not a `Uint8Array`.**
+  mdb-reader reads Jet's pages with `readUInt32LE` and friends, which a plain
+  `Uint8Array` does not have — so raw bytes from a `File` type-check happily
+  and then die on the first page. The type names those methods so it fails at
+  the call site instead. Node's `Buffer` satisfies it for free; the browser
+  wraps with `Buffer.from`, which is a view and copies nothing.
+- **`node-shim.ts` must be imported first, and supplies `process` as well as
+  `Buffer`.** Both are read while mdb-reader's module graph is _evaluated_, not
+  when it is called, so assigning them from the worker's own body is too late.
+  `process` is needed because mdb-reader reaches `create-hash` for encrypted
+  databases — code that never runs on an ePER disc but is still evaluated. A
+  thin `process` was not enough: `readable-stream` slices `process.version` at
+  module scope.
+
+## The picker cannot be automated, so the import is tested through OPFS
+
+`showDirectoryPicker` needs a user gesture, which would leave the entire
+in-browser import unverifiable. The way round it is that **OPFS directories are
+`FileSystemDirectoryHandle`s too**, and that is the only thing `BrowserSourceFs`
+asks for. So `apps/web/harness/` stages a disc into OPFS over HTTP and points
+the real worker at it; everything below the picker is the shipping code.
+
+```sh
+pnpm --filter @eperx/web exec vite build --config harness/vite.config.ts
+node apps/cli/dist/index.js serve -d apps/web/dist-harness -p 8125 --spa
+```
+
+`harness/index.html` runs a whole import. `harness/wizard.html` renders the
+wizard's later steps from a fixture, because `review`, `running` and `done` are
+pure functions of `wizard` state and their numbers are worth asserting on —
+give the fixture all twenty languages, or the language share is 1/4 instead of
+1/20 and the size estimate cannot be judged against the 568 MB an import
+actually produces.
+
+None of this is in the app build; `harness/vite.config.ts` builds it alone.
+
 ## Two console warnings are expected, and both are answers not faults
 
 The browser prints these on every load. Neither is a bug, and one of them is a
@@ -513,9 +569,9 @@ Honest list, so nobody reports these as discoveries.
   on F3, 8 on the drawing shards, all against synthetic fixtures — but the SQL
   and the import are checked by running `eperx browse`, `eperx part` and
   `eperx import` against a real tree, and that is manual.
-- **No browser tests in CI.** The UI is driven with Playwright by hand during
-  development; nothing runs it on a push. The folder picker cannot be
-  automated at all (see below).
+- **No browser tests in CI.** Playwright is a dev dependency and the harness
+  above runs a real import, but nothing runs either on a push. The folder
+  picker cannot be automated at all.
 - **Not in the UI:** cliches (`CLICHE` / `CPXDATA`), the graphical group
   selector (`MAP_*`), supersessions (the `replacements` query exists but
   nothing renders it), and the accessories catalogue.

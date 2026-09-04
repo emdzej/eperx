@@ -25,6 +25,7 @@
   } from "../lib/opfs.svelte";
   import { clearSettings, readSettings, requestAccess, saveSettings } from "../lib/settings";
   import { connect, disconnect, tree } from "../lib/tree.svelte";
+  import ImportWizard from "./ImportWizard.svelte";
 
   let { onOpened }: { onOpened?: () => void } = $props();
 
@@ -407,6 +408,34 @@
         <p class="text-[11px] text-warn">
           Importing needs a folder picker, which this browser does not have.
         </p>
+      {/if}
+    </div>
+  </section>
+
+  <section class="rounded border border-divider">
+    <header class="border-b border-divider px-3 py-2">
+      <h3 class="text-xs font-medium text-foreground">Import a disc</h3>
+      <p class="mt-0.5 text-[11px] leading-relaxed text-faint">
+        Build the tree here, from a mounted ePER disc, and keep it in this browser. The long way
+        round if you already have a tree — and the only way that needs no CLI.
+      </p>
+    </header>
+    <div class="p-3">
+      {#if can && !can.directoryPicker}
+        <p class="text-[11px] text-warn">
+          Importing needs a folder picker, which this browser does not have. Chromium-based
+          browsers can; otherwise import with the <span class="font-mono">eperx</span> CLI and
+          serve the tree over HTTP.
+        </p>
+      {:else}
+        <ImportWizard
+          onImported={async () => {
+            // Straight into it: an import that leaves you back at the picker
+            // has not finished as far as the user is concerned.
+            await refreshOpfs();
+            await open("opfs");
+          }}
+        />
       {/if}
     </div>
   </section>

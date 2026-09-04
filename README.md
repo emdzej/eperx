@@ -25,6 +25,7 @@ until you supply some. Two of the three options need nothing but a folder:
 | **Over HTTP**                | Any static host that honours `Range` — `eperx serve`, or a URL. Nothing is stored in the browser.                                                                                               |
 | **A folder on this machine** | Read in place, **nothing copied**. A service worker answers the reads, so 5.7 GB of drawings and chassis files stay put. Chromium only, and the tree must hold real files rather than symlinks. |
 | **Stored in this browser**   | Copied into the origin private file system: opens on reload with no permission prompt and no disc mounted. Checked against the quota.                                                           |
+| **Import a disc**            | Build the tree in the browser from a mounted disc — no CLI at all. Chromium only, and it wants a desktop. See [Importing in the browser](#importing-in-the-browser).                            |
 
 The choice is remembered. HTTP and browser storage reopen silently; a saved
 folder may need one click, because browsers grant directory access per session.
@@ -45,6 +46,9 @@ page.
 - **VIN lookup.** A chassis number resolves to its exact sold version, engine
   number, build date, and the options and characteristics it left the factory
   with.
+- **Importing without the CLI.** The wizard in Settings → Data reads a mounted
+  disc, converts the catalogue and writes the tree into browser storage. Same
+  importer as the CLI, same output.
 - **`eperx` CLI** — `disc`, `tables`, `import`, `serve`, `browse`, `part`,
   `applicability`, `vin`, `f3`, `image`.
 
@@ -78,6 +82,40 @@ reads rather than downloaded.
 Three sources of bytes, one transport: everything reads HTTP `Range`, and a
 service worker makes local files answer that too. Full reasoning in
 [`docs/plan.md`](docs/plan.md).
+
+## Importing in the browser
+
+The import runs in a tab as well as in Node, because none of it is really about
+Node: which files a disc carries, which columns earn an index, that a `.res`
+shard is a ZIP of stored entries. `@eperx/importer` holds all of that and talks
+to a `SourceFs`/`TargetFs` and a small `SqlWriter`; `apps/cli` and `apps/web`
+supply one implementation each.
+
+Two measurements decide whether this is reasonable, and both were taken before
+it was built. `mdb-reader` parses `SP.DB` as a **view** over the buffer rather
+than a copy, so a 1,270 MiB database peaks at **1,200 MiB** — a cost equal to
+the file, not a multiple of it. And SQLite compiled to WASM, writing through
+the SAH-pool VFS, sustains **141,995 inserts per second**, so five million rows
+take about 37 s against the CLI's 43 s. Importing in the browser is not the
+slow option.
+
+The SAH pool is not a preference. The ordinary `opfs` VFS needs
+`SharedArrayBuffer`, hence `COOP`/`COEP` headers on the origin — and requiring
+those of whoever hosts a tree would undo the point of it being servable from
+anywhere. eperx sends no such headers, so that VFS is genuinely unavailable;
+the pool installs regardless. Its one cost is that it stores files under opaque
+names, so a finished database is lifted out with `exportFile`, written where a
+client will look for it, and unlinked.
+
+The wizard shows two kinds of figure before it starts, and says which is
+which. Drawings and chassis files are **exact** — they are copied unchanged.
+The catalogue is an **estimate**, because its size depends on how many rows
+survive the language filter and counting those means doing the import. The
+estimate is a row model measured on edition 83, and for English-only it
+predicts 568 MB, which is what an import produces.
+
+**It wants a desktop.** The whole catalogue is resident while it converts, so
+1.27 GB of headroom is the entry price, and the folder picker is Chromium-only.
 
 ## Applicability is reconstructed
 
