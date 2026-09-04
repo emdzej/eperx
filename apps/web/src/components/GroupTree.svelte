@@ -31,8 +31,10 @@
     </div>
   {/if}
 
-  <!-- Groups take the upper half, subgroups the lower, so both stay visible
-       while moving between them. -->
+  <!-- Both stay visible while moving between them, but not evenly: a
+       catalogue runs to about 25 groups against a dozen subgroups, and an
+       even split left the group list clipping mid-row where it looked like a
+       rendering fault rather than a scroll boundary. -->
   <div class="flex min-h-0 flex-1 flex-col">
     <div
       class="shrink-0 border-b border-divider px-2 py-1 text-[10px] uppercase tracking-wide
@@ -40,7 +42,7 @@
     >
       Group
     </div>
-    <div class="min-h-0 flex-1 overflow-y-auto">
+    <div class="min-h-0 flex-[3] overflow-y-auto">
       {#each groups as group (group.code)}
         <button
           class="flex w-full items-baseline gap-2 border-b border-rule px-2 py-1 text-left
@@ -67,7 +69,7 @@
     >
       Subgroup
     </div>
-    <div class="min-h-0 flex-1 overflow-y-auto">
+    <div class="min-h-0 flex-[2] overflow-y-auto">
       {#each browse.subgroups as subgroup (subgroup.code)}
         <button
           class="flex w-full items-baseline gap-2 border-b border-rule px-2 py-1 text-left
