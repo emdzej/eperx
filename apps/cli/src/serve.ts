@@ -16,10 +16,11 @@ import { join, normalize, resolve } from "node:path";
  * hide the very bug that check exists for.
  *
  * CORS is open, because the point is to be read by a page served from
- * somewhere else, and `Content-Range` has to be exposed or the client cannot
- * see what it was given. A read-only file server for data the user already
- * has is not a thing to lock down; it binds to localhost unless told
- * otherwise.
+ * somewhere else — including the deployed app at eperx.emdzej.pl reading a
+ * tree on your own machine — and `Content-Range` has to be exposed or the
+ * client cannot see what it was given. A read-only file server for data the
+ * user already has is not a thing to lock down; it binds to localhost unless
+ * told otherwise.
  */
 
 export interface ServeOptions {
@@ -88,6 +89,13 @@ export async function serve(options: ServeOptions): Promise<Serving> {
       // client that cannot read it cannot tell a partial answer from a whole
       // one.
       "Access-Control-Expose-Headers": "Content-Range, Content-Length, Accept-Ranges",
+      // For the deployed app reading a tree on this machine. A page on
+      // https://eperx.emdzej.pl fetching http://127.0.0.1 is not mixed
+      // content — loopback counts as trustworthy — but Chrome's Private
+      // Network Access asks a public page to be granted the local network
+      // explicitly, and refuses the preflight without this. Harmless to
+      // browsers that do not ask.
+      "Access-Control-Allow-Private-Network": "true",
     };
 
     if (req.method === "OPTIONS") {

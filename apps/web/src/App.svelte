@@ -1,8 +1,9 @@
 <script lang="ts">
   import About from "./components/About.svelte";
-  import Cascade from "./components/Cascade.svelte";
   import DrawingView from "./components/DrawingView.svelte";
+  import GroupTree from "./components/GroupTree.svelte";
   import PartResults from "./components/PartResults.svelte";
+  import SelectorBar from "./components/SelectorBar.svelte";
   import SettingsDialog from "./components/SettingsDialog.svelte";
   import ThemeToggle from "./components/ThemeToggle.svelte";
   import { browse, loadMakes, runSearch } from "./lib/browse.svelte";
@@ -205,15 +206,18 @@
     </main>
   {:else}
     <main class="flex min-h-0 flex-1 flex-col">
+      <!-- Marque, model, catalogue and vehicle across the top; group and
+           subgroup down the left. The drawing gets everything else, which is
+           the point — it is what anyone came to look at. -->
+      <SelectorBar />
+
       {#if showingParts}
         <div class="flex min-h-0 flex-1"><PartResults /></div>
       {:else}
-        <!-- Selectors across the top, diagram below. The cascade is five
-             levels wide and would otherwise leave the drawing a sliver. -->
-        <div class="flex h-64 shrink-0 border-b border-divider bg-surface">
-          <Cascade />
+        <div class="flex min-h-0 flex-1">
+          <GroupTree />
+          <DrawingView />
         </div>
-        <div class="flex min-h-0 flex-1"><DrawingView /></div>
       {/if}
 
       <footer

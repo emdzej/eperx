@@ -93,6 +93,22 @@ the client makes. Full reasoning in [`docs/plan.md`](docs/plan.md).
 - [`docs/plan.md`](docs/plan.md) — why the project is shaped this way: sizing,
   the convert-or-not decision per data type, phase order, ranked risks.
 
+## Try it
+
+**[eperx.emdzej.pl](https://eperx.emdzej.pl)** — the built client, deployed from
+`main`.
+
+It ships **no data**, deliberately: the catalogue is Fiat's and not ours to
+redistribute. So a fresh visit lands on the source picker, and the two local
+options are the ones that need nothing else — point it at a folder produced by
+`eperx import` and it is read in place, or import it into the browser's own
+storage. Both work offline.
+
+The HTTP option works from the deployed site too, including against
+`eperx serve` on your own machine: loopback is a trustworthy origin, so it is
+not mixed content, and `serve` sends the header Chrome's Private Network
+Access asks a public page for.
+
 ## Running it
 
 ```sh

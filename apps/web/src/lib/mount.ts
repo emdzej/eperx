@@ -12,8 +12,13 @@
  */
 export type MountKind = "remote" | "directory" | "opfs";
 
-/** The path prefix `sw.js` claims. Must match. */
-const PREFIX = "/__eperx";
+/**
+ * The path prefix the worker claims, under whatever base the app is served
+ * from. `sw.js` derives the same value from its own registration scope, so the
+ * two agree without either hardcoding an origin-root path — which would break
+ * every deploy that is not at a domain root.
+ */
+const PREFIX = `${import.meta.env.BASE_URL}__eperx`.replace(/\/{2,}/g, "/");
 
 export interface Capabilities {
   /** Service workers, without which neither local mode can work. */
@@ -59,7 +64,9 @@ export async function ensureWorker(): Promise<void> {
     throw new Error("This browser has no service workers, so local data cannot be served.");
   }
 
-  registration ??= await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+  registration ??= await navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`, {
+    scope: import.meta.env.BASE_URL,
+  });
   await registration.update().catch(() => {
     // An update check failing is not a reason to refuse to run.
   });

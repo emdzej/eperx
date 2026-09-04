@@ -333,6 +333,30 @@ is measured server-side by the dev middleware — set `EPERX_TRACE=1`, or read
   drawings need it — they never do — but because a reader that wanders into
   `L_EPERTESSUTI` must find out from the data.
 
+## The deploy bakes in a path, so the path has to be decided first
+
+Vite writes `base` into every asset URL at build time and a built bundle
+cannot be relocated. A custom domain serves from the root; the default
+`<user>.github.io/<repo>/` serves from a prefix. So `pages.yml` decides from
+one signal — **the presence of `apps/web/public/CNAME`**, which is the same
+file GitHub reads to keep the domain attached. One fact, one place, and a fork
+without a CNAME still gets a working prefixed build.
+
+Two things make that safe, and both were bugs waiting to happen:
+
+- **`BASE_PATH` is declared in `turbo.json`'s `env`.** Without it, building
+  again with a different base is a cache hit that replays the wrong asset
+  paths. The failure is nasty because `index.html` still returns 200: the page
+  loads and every asset 404s. `pages.yml` greps the built HTML to catch it.
+- **The service worker derives its prefix from `self.registration.scope`**, and
+  is registered at `${import.meta.env.BASE_URL}sw.js` with that scope. A
+  hardcoded `/sw.js` at scope `/` is out of scope under a prefixed deploy, so
+  every local-data fetch falls through to the network and 404s.
+
+`sw.js` lives in `public/` and is copied rather than bundled, which makes it
+exactly the kind of file a build drops silently — `pages.yml` asserts it is
+there.
+
 ## Repository facts
 
 - **PolyForm Noncommercial 1.0.0.**

@@ -1,0 +1,111 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Not cancel-in-progress: a half-finished deploy would leave the site in whatever state
+# the cancelled run reached. Queueing is the right behaviour for a publish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Work out the base path
+        id: base
+        # A custom domain serves the site at the **root**; the default
+        # `<user>.github.io/<repo>/` serves it under a prefix. Vite bakes `base` into
+        # every asset URL at build time and a build cannot be relocated afterwards, so
+        # this has to be decided here and it has to be right.
+        #
+        # `apps/web/public/CNAME` is the signal, because it is the same file GitHub
+        # reads to keep the custom domain attached. One fact, one place — and a fork
+        # with no CNAME still gets a working prefixed build.
+        run: |
+          set -euo pipefail
+          if [ -f apps/web/public/CNAME ]; then
+            echo "path=/" >> "$GITHUB_OUTPUT"
+            echo "custom domain $(cat apps/web/public/CNAME) — building for the root"
+          else
+            echo "path=/${{ github.event.repository.name }}/" >> "$GITHUB_OUTPUT"
+            echo "no CNAME — building for /${{ github.event.repository.name }}/"
+          fi
+
+      - name: Build
+        env:
+          # Hashed by turbo (see turbo.json), so changing it actually rebuilds rather
+          # than replaying a cached build with the wrong asset paths.
+          BASE_PATH: ${{ steps.base.outputs.path }}
+        run: pnpm build
+
+      # The deployed site ships **no catalogue data**, deliberately: it is Fiat's, and
+      # not ours to redistribute. That is workable because the app can open a tree the
+      # visitor already has — a folder on their machine, read in place, or one imported
+      # into the browser's own storage. A fresh visit lands on the source picker.
+      - name: Check the build is self-contained and correctly based
+        run: |
+          set -euo pipefail
+          BASE='${{ steps.base.outputs.path }}'
+          test -f apps/web/dist/index.html
+
+          # The service worker is what makes a local folder readable at all, and it is
+          # copied from public/ rather than bundled — so it is exactly the kind of file
+          # a build can silently drop.
+          test -f apps/web/dist/sw.js
+          echo "service worker present"
+
+          # This failure is nasty because index.html still returns 200: the page loads
+          # and every asset 404s.
+          if ! grep -q "src=\"${BASE}assets/" apps/web/dist/index.html; then
+            echo "index.html does not reference assets under ${BASE}:" >&2
+            grep -oE '(src|href)="[^"]*assets[^"]*"' apps/web/dist/index.html >&2
+            exit 1
+          fi
+          echo "assets are referenced under ${BASE}"
+
+          # SQLite's WebAssembly is the largest single asset and the one thing the app
+          # cannot start without.
+          ls apps/web/dist/assets/*.wasm >/dev/null
+          echo "wasm present: $(ls -1 apps/web/dist/assets/*.wasm | wc -l) file(s)"
+
+          # A CNAME in the artifact is what keeps the custom domain attached.
+          if [ -f apps/web/public/CNAME ]; then
+            test -f apps/web/dist/CNAME
+            echo "CNAME deployed: $(cat apps/web/dist/CNAME)"
+          fi
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: apps/web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A second push supersedes the first: nothing here is worth finishing for a commit that
+# has already been replaced.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Build, typecheck, test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # No `version:` on purpose — `packageManager` in package.json is the single source
+      # of the pnpm version, and setting both makes the action error on the conflict.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Typecheck
+        # Covers the workspace *and* apps/web, which type-checks through svelte-check
+        # against its own tsconfig. Running only the root check misses the web app
+        # entirely — the package pass never sees a `.svelte` file.
+        run: pnpm typecheck
+
+      - name: Test
+        # Every fixture is synthetic, so the whole suite runs here. What cannot is the
+        # import against a real ePER disc — that needs the disc, and the disc is not
+        # ours to ship. Its row counts are the regression test for `apps/cli`, and they
+        # stay a manual step; see AGENTS.md.
+        run: pnpm test
+
+      # Kept so a pull request can be looked at without building it locally. Short
+      # retention: this is a debugging aid, not a distribution channel.
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'pull_request'
+        with:
+          name: web-dist
+          path: apps/web/dist
+          retention-days: 7

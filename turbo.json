@@ -1,7 +1,15 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "tasks": {
-    "build": { "dependsOn": ["^build"], "outputs": ["dist/**"] },
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**"],
+      // BASE_PATH is hashed because Vite bakes it into every asset URL.
+      // Without it here, building again with a different base is a cache hit
+      // and ships the wrong paths — index.html returns 200 and every asset
+      // 404s.
+      "env": ["BASE_PATH"]
+    },
     "typecheck": { "dependsOn": ["^build"] },
     "clean": { "cache": false }
   }

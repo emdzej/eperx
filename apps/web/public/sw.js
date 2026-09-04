@@ -24,7 +24,14 @@
  * are untouched.
  */
 
-const PREFIX = "/__eperx/";
+/*
+ * Derived from the registration scope rather than hardcoded, so the worker
+ * serves `/__eperx/...` at a domain root and `/eperx/__eperx/...` under a
+ * repository-prefixed Pages deploy. Hardcoding the root path meant every
+ * fetch fell through to the network on a prefixed deploy — a 404 that reads
+ * as a missing file.
+ */
+const PREFIX = new URL("__eperx/", self.registration.scope).pathname;
 
 /** Mount name → FileSystemDirectoryHandle. */
 const mounts = new Map();

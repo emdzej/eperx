@@ -151,6 +151,14 @@ const REPO_URL = (manifest.repository?.url ?? "https://github.com/emdzej/eperx")
 );
 
 export default defineConfig({
+  /**
+   * Where the app will be served from. Baked in at build time — a built
+   * bundle cannot be relocated afterwards — so a custom domain (root) and the
+   * default `<user>.github.io/<repo>/` need different builds. The Pages
+   * workflow decides which from the presence of `public/CNAME`.
+   */
+  base: process.env["BASE_PATH"] ?? "/",
+
   define: {
     __APP_VERSION__: JSON.stringify(manifest.version),
     __REPO_URL__: JSON.stringify(REPO_URL),
