@@ -1,4 +1,4 @@
-import { createReadStream, statSync } from "node:fs";
+import { createReadStream, existsSync, statSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { join, normalize, resolve } from "node:path";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
@@ -39,6 +39,19 @@ function dataTree(root: string | undefined): Plugin {
 function mount(server: ViteDevServer | PreviewServer, root: string | undefined): void {
   if (!root) return;
   const base = resolve(root);
+
+  // `pnpm dev` runs Vite with `apps/web` as its working directory, so a
+  // relative `EPERX_DATA` resolves against that and not the repo root. Getting
+  // it wrong used to register the route anyway and 404 every request, which
+  // surfaced in the browser as an unrelated-looking failure to open the tree.
+  if (!existsSync(base) || !statSync(base).isDirectory()) {
+    server.config.logger.warn(
+      `  ⚠  EPERX_DATA=${root} is not a directory (looked in ${base}).\n` +
+        `     Use an absolute path — Vite's working directory is apps/web.`,
+    );
+    return;
+  }
+
   server.config.logger.info(`  ➜  Data:    /data → ${base}`);
 
   // Byte accounting, because the client cannot do it: SQLite fetches its pages

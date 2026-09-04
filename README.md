@@ -119,7 +119,11 @@ node $cli import /Volumes/ePER\ ed.83 -o data
 # English only, catalogue and drawings — 568 MB plus the shards
 node $cli import /Volumes/ePER\ ed.83 -o data -l 3
 
-# Leave the 4.7 GB of shards on the disc and index them where they sit
+# Symlink the shards and chassis files instead of copying 5.7 GB. The tree
+# then needs the disc to stay mounted, and comes to 720 MB rather than 6.4 GB.
+node $cli import /Volumes/ePER\ ed.83 -o data -l 3 --link
+
+# Leave the 4.7 GB of shards on the disc and only index them
 node $cli import /Volumes/ePER\ ed.83 -o data -l 3 --index-images-in-place
 
 # Catalogue only
@@ -198,8 +202,12 @@ and — from `SP.RT` — the options and characteristics it left the factory wit
 `pnpm dev` serves an imported tree at `/data`, honouring `Range`:
 
 ```sh
-EPERX_DATA=./data pnpm dev
+EPERX_DATA="$PWD/data" pnpm dev
 ```
+
+Use an **absolute** path: Vite runs with `apps/web` as its working directory,
+so a relative one resolves against that. A path that is not a directory is
+reported at startup rather than 404ing every request later.
 
 `pnpm preview` takes the same variable and serves the production bundle, which
 is the closest thing to how this is actually deployed — same request counts,

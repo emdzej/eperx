@@ -1,5 +1,13 @@
 #!/usr/bin/env node
-import { copyFileSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { inflateRawSync } from "node:zlib";
 import { basename, join } from "node:path";
 import { DatabaseSync } from "./sqlite.js";
@@ -96,6 +104,11 @@ program
   .option("--no-images", "skip the drawing shards entirely")
   .option("--no-chassis", "skip the F3 chassis and build files (706 MB)")
   .option("--index-images-in-place", "index the shards where they are instead of copying 4.7 GB")
+  .option(
+    "--link",
+    "symlink the drawing shards and chassis files instead of copying 5.7 GB; " +
+      "the tree then needs the disc to stay mounted",
+  )
   .option("-f, --force", "replace an existing tree")
   .option(
     "--page-size <bytes>",
@@ -156,6 +169,7 @@ program
       images = await importImages({
         imagesDir: disc.files.imagesDir,
         targetDir: copying ? join(options.out, "images") : undefined,
+        link: options.link,
         catalogue,
         onProgress: ({ shard, index, count }) => {
           process.stderr.write(`\r\x1b[K  ${shard}  ${index + 1}/${count}`);
@@ -185,9 +199,15 @@ program
       ] as const) {
         if (!from) continue;
         const name = basename(from);
-        copyFileSync(from, join(options.out, "chassis", name));
+        const to = join(options.out, "chassis", name);
+        rmSync(to, { force: true });
+        if (options.link) symlinkSync(from, to);
+        else copyFileSync(from, to);
         chassis[key] = name;
-        console.log(`  ${name}  ${(statSync(from).size / 1e6).toFixed(0)} MB`);
+        console.log(
+          `  ${name}  ${(statSync(from).size / 1e6).toFixed(0)} MB` +
+            (options.link ? chalk.dim(" (linked)") : ""),
+        );
       }
     }
 

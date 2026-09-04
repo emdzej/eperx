@@ -1,4 +1,4 @@
-import { copyFileSync, mkdirSync, statSync } from "node:fs";
+import { copyFileSync, mkdirSync, rmSync, statSync, symlinkSync } from "node:fs";
 import { basename, join } from "node:path";
 import { DatabaseSync } from "./sqlite.js";
 import { indexShard, SHARD_SUFFIX } from "@eperx/res";
@@ -26,8 +26,15 @@ import { FileSource } from "./node-source.js";
 export interface ImportImagesOptions {
   /** `<mount>/data/images`. */
   imagesDir: string;
-  /** Directory to copy the shards into, or `undefined` to index in place. */
+  /** Directory to place the shards in, or `undefined` to index in place. */
   targetDir?: string;
+  /**
+   * Symlink the shards instead of copying them.
+   *
+   * The tree then needs the disc to stay mounted, but it costs nothing rather
+   * than 5 GB — which matters when the alternative is not importing at all.
+   */
+  link?: boolean;
   /** Catalogue database to write the `images` table into. */
   catalogue: string;
   onProgress?: (event: { shard: string; index: number; count: number; entries: number }) => void;
@@ -81,7 +88,12 @@ export async function importImages(options: ImportImagesOptions): Promise<Import
     }
     db.exec("COMMIT");
 
-    if (options.targetDir) copyFileSync(from, join(options.targetDir, name));
+    if (options.targetDir) {
+      const to = join(options.targetDir, name);
+      rmSync(to, { force: true });
+      if (options.link) symlinkSync(from, to);
+      else copyFileSync(from, to);
+    }
 
     result.shards++;
     result.entries += entries.length;
