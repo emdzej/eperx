@@ -200,17 +200,19 @@ own index is keyed, so nothing VIN-specific is needed beyond splitting the two
 out. The answer is that chassis's exact version, engine number, build date
 and — from `SP.RT` — the options and characteristics it left the factory with.
 
-### Serve a tree
+### Serve a tree, and the app
 
 ```sh
-node $cli serve -d data            # http://127.0.0.1:8998, Range + CORS
-node $cli serve -d data -p 9000 -v # another port, logging each request
+node $cli serve -d data                       # the tree: Range + CORS
+node $cli serve -d apps/web/dist -p 8080 --spa  # the built client
 ```
 
-A read-only static file server, which is all the client needs — and the
+A read-only static file server, which is all either half needs — and the
 deployment story made runnable. It reports a running count of requests and
 bytes, so it is visible that the client reads pages rather than downloading
-files.
+files. `--spa` serves `index.html` for extensionless paths and is only for
+hosting the client: a data tree wants a plain 404, so that a missing shard is
+reported rather than answered with a web page.
 
 ### Run the browser client
 
@@ -218,7 +220,9 @@ files.
 pnpm dev          # http://localhost:5173
 ```
 
-Then choose one of three sources on the opening screen:
+On a first visit it asks where the catalogue comes from; the choice is
+remembered and reopened silently after that. The gear in the top bar reopens
+the same panel. Three sources:
 
 |                              |                                                                                                                                                                                                       |
 | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -228,7 +232,11 @@ Then choose one of three sources on the opening screen:
 
 The client **rejects a host that ignores `Range`** rather than reading the
 wrong bytes out of a full-body response. The footer shows how many statements
-a click cost.
+a click cost, and which source they went to.
+
+A saved folder is a caveat worth knowing: the handle persists, but browsers
+grant directory read access **per session**, so a later visit may need one
+click to re-grant. HTTP and browser storage reopen with no interaction at all.
 
 `pnpm dev` can also serve a tree itself at `/data` with
 `EPERX_DATA="$PWD/data"` — an **absolute** path, because Vite runs with

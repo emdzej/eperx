@@ -1,6 +1,7 @@
-import { createReadStream, existsSync, statSync } from "node:fs";
+import { createReadStream, existsSync, readFileSync, statSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { join, normalize, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import { defineConfig, type Plugin, type ViteDevServer, type PreviewServer } from "vite";
 
@@ -132,7 +133,29 @@ function mount(server: ViteDevServer | PreviewServer, root: string | undefined):
   });
 }
 
+/**
+ * Version and repository, read at build time and injected as string literals.
+ *
+ * `define` rather than importing `package.json`, so the manifest never reaches
+ * the browser and the displayed version cannot drift from the one a release
+ * tag names. The root manifest is the repo's version — the same thing a
+ * GitHub release is cut from — not `apps/web`'s.
+ */
+const manifest = JSON.parse(
+  readFileSync(fileURLToPath(new URL("../../package.json", import.meta.url)), "utf8"),
+) as { version: string; repository?: { url?: string } };
+
+const REPO_URL = (manifest.repository?.url ?? "https://github.com/emdzej/eperx").replace(
+  /\.git$/,
+  "",
+);
+
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(manifest.version),
+    __REPO_URL__: JSON.stringify(REPO_URL),
+  },
+
   plugins: [svelte(), dataTree(process.env["EPERX_DATA"])],
 
   // Vite's dependency pre-bundler rewrites `sqlite-wasm-http` in dev and its

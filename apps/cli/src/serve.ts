@@ -30,6 +30,13 @@ export interface ServeOptions {
   host: string;
   /** Log each request. */
   verbose?: boolean;
+  /**
+   * Serve `index.html` for a request with no extension.
+   *
+   * Only for hosting the client; a data tree wants a plain 404 so that a
+   * missing shard is reported rather than answered with a web page.
+   */
+  spa?: boolean;
   onRequest?: (info: { path: string; status: number; bytes: number }) => void;
 }
 
@@ -40,10 +47,27 @@ export interface Serving {
   stats(): { requests: number; bytes: number };
 }
 
+/**
+ * Content types.
+ *
+ * The web ones matter as much as the data ones: the built client is nothing
+ * but static files, so this can host the app as well as the tree — and a
+ * browser refuses a module script served as `application/octet-stream`, so
+ * getting these wrong looks like a broken app rather than a wrong header.
+ */
 const TYPES: Record<string, string> = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".mjs": "text/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".wasm": "application/wasm",
   ".json": "application/json",
+  ".map": "application/json",
+  ".svg": "image/svg+xml",
+  ".ico": "image/x-icon",
   ".png": "image/png",
-  ".sqlite": "application/octet-stream",
+  ".jpg": "image/jpeg",
+  ".woff2": "font/woff2",
 };
 
 export async function serve(options: ServeOptions): Promise<Serving> {
@@ -90,19 +114,36 @@ export async function serve(options: ServeOptions): Promise<Serving> {
       return;
     }
 
+    let target = path;
+    let name = rel;
     let size: number;
     try {
-      const stat = statSync(path);
-      if (!stat.isFile()) throw new Error("not a file");
+      const stat = statSync(target);
+      if (stat.isDirectory()) throw new Error("directory");
       size = stat.size;
     } catch {
-      res.writeHead(404, cors);
-      res.end(`${rel} not found`);
-      done(404);
-      return;
+      // A client route or a bare `/` gets the app shell, but only when asked
+      // to host one.
+      if (options.spa && !rel.slice(rel.lastIndexOf("/")).includes(".")) {
+        target = join(root, "index.html");
+        name = "index.html";
+        try {
+          size = statSync(target).size;
+        } catch {
+          res.writeHead(404, cors);
+          res.end("no index.html");
+          done(404);
+          return;
+        }
+      } else {
+        res.writeHead(404, cors);
+        res.end(`${rel} not found`);
+        done(404);
+        return;
+      }
     }
 
-    const extension = rel.slice(rel.lastIndexOf("."));
+    const extension = name.slice(name.lastIndexOf("."));
     const headers = {
       ...cors,
       "Accept-Ranges": "bytes",
@@ -122,7 +163,7 @@ export async function serve(options: ServeOptions): Promise<Serving> {
     const match = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range ?? "");
     if (!match) {
       res.writeHead(200, { ...headers, "Content-Length": String(size) });
-      createReadStream(path).pipe(res);
+      createReadStream(target).pipe(res);
       done(200, size);
       return;
     }
@@ -152,7 +193,7 @@ export async function serve(options: ServeOptions): Promise<Serving> {
       "Content-Range": `bytes ${start}-${end}/${size}`,
       "Content-Length": String(length),
     });
-    createReadStream(path, { start, end }).pipe(res);
+    createReadStream(target, { start, end }).pipe(res);
     done(206, length);
   });
 

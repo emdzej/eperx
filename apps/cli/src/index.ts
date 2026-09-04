@@ -555,12 +555,17 @@ program
   .option("-p, --port <n>", "port", (v) => Number(v), 8998)
   .option("--host <host>", "interface to bind", "127.0.0.1")
   .option("-v, --verbose", "log every request")
+  .option(
+    "--spa",
+    "serve index.html for extensionless paths — for hosting the built client, " + "not a data tree",
+  )
   .action(async (options) => {
     const serving = await serve({
       root: options.data,
       port: options.port,
       host: options.host,
       verbose: options.verbose,
+      spa: options.spa,
     });
     console.log(`${chalk.bold("eperx")} serving ${options.data}`);
     console.log(`  ${serving.url}`);

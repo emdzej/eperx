@@ -4,6 +4,10 @@
   "version": "0.1.0",
   "description": "Browser-based Fiat group parts catalogue — a client-side reimplementation of ePER",
   "license": "PolyForm-Noncommercial-1.0.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/emdzej/eperx"
+  },
   "type": "module",
   "packageManager": "pnpm@10.33.1",
   "scripts": {

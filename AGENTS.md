@@ -261,6 +261,22 @@ Two lifecycle details are load-bearing, and both fail as "file not found":
 `HEAD` is how a client learns a file's size, and the suffix form is how a ZIP's
 end-of-central-directory gets found.
 
+## A folder cannot be remembered in localStorage
+
+`localStorage` holds the _choice_ — which source, and the URL for a remote
+one. The **directory handle goes in IndexedDB**, because a
+`FileSystemDirectoryHandle` is not JSON: `JSON.stringify` turns it into `{}`,
+a silent loss that reads as "the folder was forgotten". It _is_
+structured-cloneable, which is what IndexedDB takes.
+
+The handle surviving is not the same as being usable. Browsers grant directory
+read access per session, so `queryPermission` can come back `prompt` on a
+later visit and re-granting **needs a user gesture** — `requestPermission`
+throws without one. So `readSettings` queries rather than requests, and
+reports which case it is; the UI offers a button for `prompt` instead of
+failing at the first read. HTTP and OPFS need no permission and resume
+silently.
+
 ## The browser's SQLite is fussy, and three fixes are load-bearing
 
 - **`pool.exec` does not return rows.** It is typed `RowObject[]` but returns
