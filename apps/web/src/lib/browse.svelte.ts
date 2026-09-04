@@ -33,8 +33,9 @@ import {
   type Version,
 } from "@eperx/catalogue";
 import { HttpSource } from "./http-source";
+import { clearSelection, readSelection, writeSelection, type SavedVehicle } from "./selection";
 import { tree } from "./tree.svelte";
-import { vin, vinSpecification, vinSummary } from "./vin.svelte";
+import { lookupVin, vin, vinSpecification, vinSummary } from "./vin.svelte";
 
 /**
  * Where the user is in the catalogue, and what that implies is on screen.
@@ -85,6 +86,48 @@ export const browse = $state({
   error: undefined as string | undefined,
 });
 
+/**
+ * Suppresses `remember()` while a restore walks down the levels.
+ *
+ * Without it, restoring the marque would immediately save a selection with no
+ * model or catalogue in it, and the rest of what we were restoring would be
+ * gone before we got to it.
+ */
+let restoring = false;
+
+/** Hide or show definite non-fits, and remember which. */
+export function setHideUnfit(value: boolean): void {
+  browse.hideUnfit = value;
+  remember();
+}
+
+/** Keep the four choices above the group tree, so a reload lands back here. */
+function remember(): void {
+  if (restoring) return;
+  writeSelection({
+    make: browse.make?.code,
+    modelGroup: browse.modelGroup?.code,
+    catalogue: browse.catalogue?.code,
+    vehicle: savedVehicle(),
+    hideUnfit: browse.hideUnfit,
+  });
+}
+
+function savedVehicle(): SavedVehicle | undefined {
+  if (browse.source === "vin" && vin.query) return { kind: "vin", vin: vin.query };
+  const version = browse.version;
+  if (browse.source === "version" && version) {
+    return {
+      kind: "version",
+      sincom: version.sincom ?? undefined,
+      model: version.model,
+      version: version.version,
+      series: version.series,
+    };
+  }
+  return undefined;
+}
+
 async function run(work: () => Promise<void>): Promise<void> {
   browse.busy = true;
   browse.error = undefined;
@@ -121,6 +164,7 @@ export async function selectMake(make: Make): Promise<void> {
     });
     clearDrawing();
     browse.modelGroups = await modelGroups(tree.catalogue!, make.code);
+    remember();
   });
 }
 
@@ -139,6 +183,7 @@ export async function selectModelGroup(modelGroup: ModelGroup): Promise<void> {
     });
     clearDrawing();
     browse.catalogues = await catalogues(tree.catalogue!, browse.make!.code, modelGroup.code);
+    remember();
   });
 }
 
@@ -164,6 +209,7 @@ export async function selectCatalogue(entry: CatalogueEntry): Promise<void> {
     await selectVersion(undefined);
     const [loaded] = await Promise.all([groups(tree.catalogue!, entry.code), searchVersions("")]);
     browse.groups = loaded;
+    remember();
   });
 }
 
@@ -354,6 +400,7 @@ export async function applyVin(): Promise<void> {
       );
       if (replacement) await showDrawing(replacement);
     }
+    remember();
   });
 }
 
@@ -400,6 +447,7 @@ export async function selectVersion(version: Version | undefined): Promise<void>
       );
       if (replacement) await showDrawing(replacement);
     }
+    remember();
   });
 }
 
@@ -426,3 +474,92 @@ function scoreCallouts(): void {
 }
 
 export { scoreCallouts, scoreDrawings };
+
+/**
+ * Walk back to where the user was, if the tree still has it.
+ *
+ * Called once after `loadMakes()`. Each level is looked up in data that was
+ * just loaded rather than trusted from storage, so a re-imported tree or a
+ * different release cannot produce a selection that does not exist — a code
+ * that no longer resolves just stops the walk, leaving the levels above it
+ * selected and the rest for the user.
+ *
+ * The whole walk is guarded by `restoring`, because every `select*` saves as
+ * it goes and would otherwise overwrite the very thing being read.
+ */
+export async function restoreSelection(): Promise<void> {
+  const saved = readSelection();
+  if (!saved || !tree.catalogue) return;
+
+  restoring = true;
+  try {
+    if (saved.hideUnfit !== undefined) browse.hideUnfit = saved.hideUnfit;
+
+    const make = browse.makes.find((m) => m.code === saved.make);
+    if (!make) return;
+    await selectMake(make);
+
+    const modelGroup = browse.modelGroups.find((m) => m.code === saved.modelGroup);
+    if (!modelGroup) return;
+    await selectModelGroup(modelGroup);
+
+    const catalogue = browse.catalogues.find((c) => c.code === saved.catalogue);
+    if (!catalogue) return;
+    await selectCatalogue(catalogue);
+
+    await restoreVehicle(saved.vehicle);
+  } catch (error) {
+    // A restore is a convenience: failing it must not stop the app opening,
+    // and the error would be about a selection the user has not asked for yet.
+    // Logged rather than swallowed, because a silent catch here hid a real
+    // bug once already.
+    console.warn("eperx: could not restore the previous selection", error);
+  } finally {
+    restoring = false;
+    // Save what actually came back, so a partial restore does not keep
+    // retrying the parts that no longer resolve.
+    remember();
+  }
+}
+
+async function restoreVehicle(vehicle: SavedVehicle | undefined): Promise<void> {
+  if (!vehicle) return;
+
+  if (vehicle.kind === "vin") {
+    await lookupVin(vehicle.vin);
+    // Only apply it if the disc actually knows the car. A VIN that no longer
+    // resolves — a different release, say — leaves the catalogue unfiltered
+    // rather than filtered by nothing.
+    if (vin.buildRecord) await applyVin();
+    return;
+  }
+
+  // `selectCatalogue` loads the first 200 versions, and a catalogue can carry
+  // 10,436 — so the saved one is searched for rather than looked for among
+  // those already in hand.
+  const found = await findVersion(vehicle);
+  if (found) await selectVersion(found);
+}
+
+async function findVersion(saved: {
+  sincom?: string;
+  model: string;
+  version: string;
+  series: string;
+}): Promise<Version | undefined> {
+  const matches = (v: Version) =>
+    saved.sincom
+      ? v.sincom === saved.sincom
+      : v.model === saved.model && v.version === saved.version && v.series === saved.series;
+
+  const already = browse.versions.find(matches);
+  if (already) return already;
+
+  // `SINCOM` is what the search matches on, so a version without one can only
+  // be found by loading the catalogue's versions and looking.
+  await searchVersions(saved.sincom ?? "");
+  return browse.versions.find(matches);
+}
+
+/** Forget where the user was — used when the data source changes. */
+export { clearSelection };

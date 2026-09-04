@@ -6,7 +6,7 @@
   import SelectorBar from "./components/SelectorBar.svelte";
   import SettingsDialog from "./components/SettingsDialog.svelte";
   import ThemeToggle from "./components/ThemeToggle.svelte";
-  import { browse, loadMakes, runSearch } from "./lib/browse.svelte";
+  import { browse, loadMakes, restoreSelection, runSearch } from "./lib/browse.svelte";
   import { hasManifest, mount } from "./lib/mount";
   import { readSettings } from "./lib/settings";
   import { connect, setLanguage, stats, tree } from "./lib/tree.svelte";
@@ -56,7 +56,11 @@
         throw new Error("the saved source no longer holds a catalogue");
       }
       await connect(base, { kind: resumable.settings.kind });
-      if (tree.catalogue) await loadMakes();
+      if (tree.catalogue) {
+        await loadMakes();
+        // Back to where they were, if this tree still has it.
+        await restoreSelection();
+      }
     } catch (error) {
       resumeError = error instanceof Error ? error.message : String(error);
       settingsOpen = true;
@@ -72,8 +76,11 @@
 
   async function changeLanguage(code: string) {
     setLanguage(code);
-    // Every label came from a per-language join, so the whole tree is stale.
+    // Every label came from a per-language join, so the whole tree is stale —
+    // including the objects behind the current selection, which is why this
+    // re-resolves it rather than leaving the old rows on screen.
     await loadMakes();
+    await restoreSelection();
   }
 
   const kb = (n: number) => `${(n / 1024).toFixed(0)} kB`;

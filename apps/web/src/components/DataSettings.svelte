@@ -6,7 +6,7 @@
   is one place to get it right.
 -->
 <script lang="ts">
-  import { loadMakes } from "../lib/browse.svelte";
+  import { clearSelection, loadMakes, restoreSelection } from "../lib/browse.svelte";
   import {
     capabilities,
     hasManifest,
@@ -91,7 +91,12 @@
         );
       }
       await connect(at, { kind });
-      if (tree.catalogue) await loadMakes();
+      if (tree.catalogue) {
+        await loadMakes();
+        // A newly chosen source may well be the same catalogue as before, so
+        // the previous selection is offered back rather than assumed stale.
+        await restoreSelection();
+      }
 
       if (options.remember !== false) {
         await saveSettings(
@@ -141,6 +146,10 @@
 
   async function forgetDirectory() {
     await clearSettings();
+    // Where the user was is only meaningful against a source, so it goes with
+    // it — otherwise the next tree opens pre-filtered by a vehicle from a
+    // catalogue that is no longer mounted.
+    clearSelection();
     await disconnect();
     saved = undefined;
     await refreshSaved();

@@ -17,6 +17,7 @@
     browse,
     searchVersions,
     selectVersion,
+    setHideUnfit,
     specificationLabel,
   } from "../lib/browse.svelte";
   import { hasChassisData, lookupVin, vin } from "../lib/vin.svelte";
@@ -89,7 +90,12 @@
     </span>
 
     <label class="flex shrink-0 items-center gap-1 text-[11px] text-muted" title="Hide drawings and parts this vehicle definitely cannot have">
-      <input type="checkbox" bind:checked={browse.hideUnfit} class="accent-accent" />
+      <input
+        type="checkbox"
+        checked={browse.hideUnfit}
+        onchange={(e) => setHideUnfit(e.currentTarget.checked)}
+        class="accent-accent"
+      />
       filter
     </label>
   {:else}
