@@ -1,7 +1,7 @@
 import type { Catalogue, Rows, SqlValue } from "@eperx/catalogue";
 import { languages, type Language } from "@eperx/catalogue";
 import { createSQLiteHTTPPool, type SQLiteHTTPPool } from "sqlite-wasm-http";
-import type { MountKind } from "./mount";
+import { verifyTree, type MountKind } from "./mount";
 
 /**
  * The connection to an imported tree.
@@ -35,6 +35,12 @@ export interface TreeState {
   /** Which backend the pool chose, so the page can say. */
   backend?: "shared" | "sync";
   error?: string;
+  /**
+   * The tree connected, but part of it is unreadable — a linked tree opened
+   * from a folder, typically. Separate from `error` because the catalogue
+   * still works and browsing it is still worth doing.
+   */
+  warning?: string;
   connecting: boolean;
 }
 
@@ -95,6 +101,7 @@ export async function connect(
 ): Promise<void> {
   tree.connecting = true;
   tree.error = undefined;
+  tree.warning = undefined;
   try {
     await disconnect();
     tree.base = base.replace(/\/$/, "");
@@ -125,6 +132,11 @@ export async function connect(
         ? language
         : (available[0]?.code ?? "3");
     tree.catalogue = { rows, language: chosen };
+
+    // After the catalogue opens, not before: this checks the parts of the tree
+    // the catalogue does not cover, and a failure here is a warning rather
+    // than a reason to abandon a connection that otherwise works.
+    tree.warning = await verifyTree(tree.base, tree.kind);
   } catch (error) {
     tree.error = error instanceof Error ? error.message : String(error);
     tree.pool = undefined;

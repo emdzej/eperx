@@ -20,11 +20,11 @@ ships **without data**: bring a disc, or point it at a tree you already have.
 A fresh visit lands on the source picker, because there is no data to show
 until you supply some. Two of the three options need nothing but a folder:
 
-| Source                       | What it does                                                                                                                            |
-| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| **Over HTTP**                | Any static host that honours `Range` — `eperx serve`, or a URL. Nothing is stored in the browser.                                       |
-| **A folder on this machine** | Read in place, **nothing copied**. A service worker answers the reads, so 5.7 GB of drawings and chassis files stay put. Chromium only. |
-| **Stored in this browser**   | Copied into the origin private file system: opens on reload with no permission prompt and no disc mounted. Checked against the quota.   |
+| Source                       | What it does                                                                                                                                                                                    |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Over HTTP**                | Any static host that honours `Range` — `eperx serve`, or a URL. Nothing is stored in the browser.                                                                                               |
+| **A folder on this machine** | Read in place, **nothing copied**. A service worker answers the reads, so 5.7 GB of drawings and chassis files stay put. Chromium only, and the tree must hold real files rather than symlinks. |
+| **Stored in this browser**   | Copied into the origin private file system: opens on reload with no permission prompt and no disc mounted. Checked against the quota.                                                           |
 
 The choice is remembered. HTTP and browser storage reopen silently; a saved
 folder may need one click, because browsers grant directory access per session.
@@ -144,7 +144,8 @@ node $cli import /Volumes/ePER\ ed.83 -o data
 node $cli import /Volumes/ePER\ ed.83 -o data -l 3
 
 # Symlink the shards and chassis files instead of copying 5.7 GB. The tree is
-# then 742 MB rather than 6.4 GB, and needs the disc to stay mounted.
+# then 742 MB rather than 6.4 GB, and needs the disc to stay mounted — and is
+# servable over HTTP only: see the note below.
 node $cli import /Volumes/ePER\ ed.83 -o data -l 3 --link
 
 # Index the shards where they sit and copy nothing. The catalogue knows their
@@ -154,6 +155,14 @@ node $cli import /Volumes/ePER\ ed.83 -o data -l 3 --index-images-in-place
 # Catalogue only
 node $cli import /Volumes/ePER\ ed.83 -o data -l 3 --no-images --no-accessories
 ```
+
+**`--link` produces an HTTP-only tree.** A browser will not follow a symlink
+out of the directory you grant it — that is a sandbox escape, and the File
+System Access API blocks it. `catalogue.sqlite` is a real file either way, so a
+linked tree opened as a folder mounts cleanly and browses fine until the first
+drawing or VIN lookup, which cannot be read at all. The client checks for this
+on connect and says so; `import` warns when it happens. For a tree that works
+from a folder or from browser storage, import without `--link`.
 
 `-l` takes `LNG_COD` values from the `LANG` table (`0` Italian, `3` English,
 `4` German, `N` Russian, …). It is the main size lever: the per-language

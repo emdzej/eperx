@@ -151,14 +151,84 @@ export async function mount(
   return `${PREFIX}/${kind}`;
 }
 
-/** Does a mount look like an imported tree? */
-export async function hasManifest(base: string): Promise<boolean> {
+/** What an imported tree says about itself. */
+interface Manifest {
+  catalogue?: { file?: string };
+  images?: { dir?: string | null };
+  chassis?: { dir?: string; files?: Record<string, string> };
+  /** `eperx import --link` symlinked the big files instead of copying them. */
+  linked?: boolean;
+}
+
+async function readManifest(base: string): Promise<Manifest | undefined> {
   try {
     const response = await fetch(`${base}/manifest.json`);
-    if (!response.ok) return false;
-    const body = (await response.json()) as { catalogue?: unknown };
-    return Boolean(body.catalogue);
+    if (!response.ok) return undefined;
+    return (await response.json()) as Manifest;
   } catch {
-    return false;
+    return undefined;
   }
+}
+
+/** Does a mount look like an imported tree? */
+export async function hasManifest(base: string): Promise<boolean> {
+  const manifest = await readManifest(base);
+  return Boolean(manifest?.catalogue);
+}
+
+/**
+ * Check that the files the manifest promises can actually be read.
+ *
+ * This exists because of one specific, silent failure. `eperx import --link`
+ * symlinks the drawing shards and chassis files rather than copying 5.7 GB,
+ * and a symlink is invisible to the File System Access API when it points out
+ * of the directory the user granted — the browser blocks that as a sandbox
+ * escape. `catalogue.sqlite` is a real file, so the tree mounts, the marque
+ * list fills in, and browsing works right up until the first drawing or VIN
+ * lookup answers `404`. Which reads as a bug in eperx, not as a tree that
+ * cannot be opened this way.
+ *
+ * Returns a message to show, or `undefined` if the tree is sound. Deliberately
+ * a warning and not an error: the catalogue and the parts lists genuinely do
+ * work, so refusing to connect would take away more than it protects.
+ */
+export async function verifyTree(base: string, kind: MountKind): Promise<string | undefined> {
+  // A remote host serves whatever its filesystem resolves, links included.
+  if (kind === "remote") return undefined;
+
+  const manifest = await readManifest(base);
+  if (!manifest) return undefined;
+
+  // Probe one shard and the chassis files rather than all 261: a linked tree
+  // links every one of them, so the first is representative.
+  const probes: { path: string; what: string }[] = [];
+  if (manifest.images?.dir)
+    probes.push({ path: `${manifest.images.dir}/00.res`, what: "drawings" });
+  for (const name of Object.values(manifest.chassis?.files ?? {})) {
+    probes.push({ path: `${manifest.chassis?.dir ?? "chassis"}/${name}`, what: "VIN lookup" });
+  }
+  if (!probes.length) return undefined;
+
+  const unreadable = new Set<string>();
+  await Promise.all(
+    probes.map(async ({ path, what }) => {
+      try {
+        const response = await fetch(`${base}/${encodeURI(path)}`, { method: "HEAD" });
+        if (!response.ok) unreadable.add(what);
+      } catch {
+        unreadable.add(what);
+      }
+    }),
+  );
+  if (!unreadable.size) return undefined;
+
+  const missing = [...unreadable].join(" and ");
+  return manifest.linked
+    ? `This tree was imported with \`--link\`, so its big files are symlinks into the ` +
+        `disc. A browser will not follow a link out of the folder you granted, so ` +
+        `${missing} will not load. Serve the tree over HTTP instead, or re-import ` +
+        `it without \`--link\`.`
+    : `The catalogue opened, but ${missing} could not be read from this tree. If it was ` +
+        `imported with \`--link\` the big files are symlinks, which a browser cannot ` +
+        `follow out of the folder you granted — serve it over HTTP instead.`;
 }

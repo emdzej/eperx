@@ -291,6 +291,36 @@ reports which case it is; the UI offers a button for `prompt` instead of
 failing at the first read. HTTP and OPFS need no permission and resume
 silently.
 
+## A symlinked tree is HTTP-only, and it fails late
+
+`eperx import --link` symlinks the drawing shards and the chassis files rather
+than copying 5.7 GB. That is fine over HTTP — Node's `fs` resolves the links —
+and useless from a folder: the File System Access API will not follow a link
+that leaves the directory the user granted, because that is a sandbox escape,
+and `getFileHandle` reports it as `NotFoundError`, indistinguishable from a
+file that is not there.
+
+What made this cost an hour is **where** it surfaces. `catalogue.sqlite` is a
+real file in a linked tree, so the mount succeeds, the marque list fills in,
+groups and subgroups and parts all work — and then the first drawing and the
+first VIN lookup answer `404` on a path that plainly exists on disk. Every
+symptom points at the reader; nothing points at the tree.
+
+So two things guard it, at both ends:
+
+- `import` records `linked: true` in the manifest and warns on the way out.
+- The client runs `verifyTree()` after connecting: it `HEAD`s one shard and the
+  chassis files and, if they cannot be read, says why — naming `--link` when
+  the manifest admits to it.
+
+It is a **warning, not an error**. The catalogue genuinely works, and refusing
+to connect would take away more than it protects. Only probe one shard: a
+linked tree links all 261, so the first is representative.
+
+The general rule this is an instance of: **the local sources need a
+self-contained tree.** Anything that makes the tree cheaper by pointing outside
+it buys that saving with the folder and browser-storage modes.
+
 ## The browser's SQLite is fussy, and three fixes are load-bearing
 
 - **`pool.exec` does not return rows.** It is typed `RowObject[]` but returns
@@ -441,7 +471,10 @@ Honest list, so nobody reports these as discoveries.
   relates to `TBDATA` is not worked out.
 - **The F3 secondary indexes are unexamined.** `SP.CH` and `SP.RT` each carry
   one on `VIN`; nothing needs them, because a VIN reaches the primary index
-  through its type code and chassis number.
+  through its type code and chassis number. That route is not free, though: the
+  `VIN` table maps one type code to several models — `312` gives four — so a
+  lookup probes the primary index once per candidate. Reading the `VIN` index
+  would make it a single seek and remove the guessing.
 - **`HOTSPOTS` is null on every row inspected**, so callouts are not clickable.
   openPER has the same gap.
 - **`apps/cli` has no tests.** 60 elsewhere — 36 on the `PATTERN` grammar, 16

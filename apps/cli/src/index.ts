@@ -232,6 +232,11 @@ program
           // Named in the manifest because the filenames carry the release
           // number, so a client cannot guess them.
           chassis: chassis && { dir: "chassis", files: chassis },
+          // Recorded because it decides which sources can read this tree: a
+          // browser reading a folder the user picked will not follow a symlink
+          // out of that folder, so a linked tree is HTTP-only. The client says
+          // so up front rather than letting every drawing 404.
+          linked: options.link ? true : undefined,
         },
         null,
         2,
@@ -239,6 +244,16 @@ program
     );
 
     console.log(`\ndone in ${((Date.now() - started) / 1000).toFixed(0)}s → ${options.out}`);
+
+    if (options.link) {
+      console.log(
+        chalk.yellow("\nnote: ") +
+          "the shards and chassis files are symlinks, so this tree is servable\n" +
+          "      over HTTP but cannot be opened as a folder — browsers refuse to\n" +
+          "      follow a link out of the directory you grant. Re-run without\n" +
+          "      --link for a tree that works from a folder or browser storage.",
+      );
+    }
   });
 
 program

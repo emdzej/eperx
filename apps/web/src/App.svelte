@@ -18,6 +18,7 @@
   let firstRun = $state(false);
   let resuming = $state(true);
   let resumeError = $state<string | undefined>(undefined);
+  let warningDismissed = $state(false);
 
   // Part results take over the main pane while there are any; clearing the
   // box returns to the drawing, so there is no mode to get stuck in.
@@ -210,6 +211,27 @@
            subgroup down the left. The drawing gets everything else, which is
            the point — it is what anyone came to look at. -->
       <SelectorBar />
+
+      <!-- Part of the tree is unreadable — dismissible, and shown once rather
+           than on every drawing that fails, because the cause is the tree and
+           not the drawing. -->
+      {#if tree.warning && !warningDismissed}
+        <div
+          class="flex shrink-0 items-start gap-2 border-b border-warn/40 bg-warn/10 px-3 py-1.5
+                 text-[11px] leading-relaxed text-warn"
+        >
+          <span class="shrink-0" aria-hidden="true">!</span>
+          <p class="min-w-0 flex-1">{tree.warning}</p>
+          <button
+            class="shrink-0 text-warn/70 transition-colors hover:text-warn"
+            onclick={() => (warningDismissed = true)}
+            aria-label="Dismiss"
+            title="Dismiss"
+          >
+            &times;
+          </button>
+        </div>
+      {/if}
 
       {#if showingParts}
         <div class="flex min-h-0 flex-1"><PartResults /></div>
