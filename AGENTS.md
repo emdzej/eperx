@@ -18,6 +18,10 @@ node apps/cli/dist/index.js browse -d /tmp/x -c 33 -g 101 -s 1
 node apps/cli/dist/index.js applicability -d /tmp/x
 ```
 
+`.github/workflows/ci.yml` runs the first two on every push and pull request.
+The disc-backed ones it cannot: the disc is not ours to ship, so those stay
+manual and this list is the only place they are written down.
+
 `pnpm typecheck` is two things: `turbo run typecheck` over the packages via
 `tsc`, **and** `apps/web` separately, because the web app type-checks through
 `svelte-check` against its own tsconfig. The package pass does not see the
@@ -207,6 +211,16 @@ Traps found while doing this:
   exact-match edit written against remembered text silently matches nothing.
   Two index changes were "made" and then found still absent from the built
   output. Grep for the result.
+- **Vite has refused to start in this environment**, repeatedly: the process
+  spawns, prints nothing, and never listens. `npx` has hung the same way with
+  only the `npm exec` wrapper alive. Neither is a code fault — call the binary
+  directly (`node node_modules/vite/bin/vite.js`), give it 30s, and if it is
+  still silent use `eperx serve -d apps/web/dist --spa` instead. The built app
+  is static files and should never need a dev server to be usable.
+- **Do not `pkill -f vite`.** The process list carries whole shell wrappers, so
+  a broad pattern matches the invoking shell and takes its environment with it
+  — `curl`, `ls` and `head` all vanished mid-command once. Match the full
+  binary path.
 
 ## Reading F3 has two traps that produce plausible rubbish
 
@@ -333,6 +347,43 @@ is measured server-side by the dev middleware — set `EPERX_TRACE=1`, or read
   drawings need it — they never do — but because a reader that wanders into
   `L_EPERTESSUTI` must find out from the data.
 
+## The interface borrows deliberately, and the borrowing has limits
+
+Two siblings are drawn on, for different reasons:
+
+- **`uci`** supplies the theme — the Italian tricolor palette and the semantic
+  token names (`bg-surface`, `text-foreground`, `border-divider`,
+  `text-accent`) — and the combobox. Reusing its component conventions is
+  intended: a component should be able to move between the two unchanged.
+- **`ddtx`** supplies the _arrangement_ of the top bar and the About dialog:
+  wordmark as the button, version beside it linking to that release with no
+  `v` prefix, and a dialog that ends with the disclaimer styled loudest.
+  **ddtx is GPL and eperx is PolyForm, so nothing is taken but the shape.**
+  eperx's own words, its own tokens.
+
+What the layout is for, so it does not drift back:
+
+- **Marque, model, catalogue and vehicle are searchable dropdowns across the
+  top; group and subgroup are lists down the left.** A five-column cascade
+  showed the whole path at once but cost 960px, leaving the drawing a sliver —
+  it is now 782×609. A catalogue also runs to 223 entries and a vehicle to
+  10,436 versions, which a column cannot present and a search can. Group and
+  subgroup stayed lists because they are short and they are what you move
+  around in.
+- **The combobox skips local filtering when `onsearch` is given.** Re-filtering
+  results the server matched would hide rows matched on a field the component
+  cannot see.
+- **VIN lookup is a button beside the vehicle dropdown, not an item in it.** A
+  VIN needs a form and a form does not belong inside a listbox.
+- **Verdicts carry a glyph as well as a colour** (✓ ✗ ?). Amber and red are
+  hard to tell apart at that size and impossible for some readers, and the
+  distinction between "does not fit" and "not determined" is the entire point
+  of three-valued logic. I misread them off a screenshot myself and thought the
+  filter was broken.
+- **The version is a build-time literal**, injected by `define` from the root
+  manifest. Importing `package.json` would ship it to the browser and let the
+  displayed version drift from the tag a release is cut from.
+
 ## The deploy bakes in a path, so the path has to be decided first
 
 Vite writes `base` into every asset URL at build time and a built bundle
@@ -391,12 +442,15 @@ Honest list, so nobody reports these as discoveries.
 - **The F3 secondary indexes are unexamined.** `SP.CH` and `SP.RT` each carry
   one on `VIN`; nothing needs them, because a VIN reaches the primary index
   through its type code and chassis number.
-- **No F3 reader**, so no VIN search. Header parses by eye only.
 - **`HOTSPOTS` is null on every row inspected**, so callouts are not clickable.
   openPER has the same gap.
-- **Only `packages/res` has tests.** Eight of them, on synthetic archives.
-  `@eperx/catalogue` and `apps/cli` have none: the SQL is checked by running
-  `eperx browse` and `eperx part` against a real tree, and that is manual.
+- **`apps/cli` has no tests.** 60 elsewhere — 36 on the `PATTERN` grammar, 16
+  on F3, 8 on the drawing shards, all against synthetic fixtures — but the SQL
+  and the import are checked by running `eperx browse`, `eperx part` and
+  `eperx import` against a real tree, and that is manual.
+- **No browser tests in CI.** The UI is driven with Playwright by hand during
+  development; nothing runs it on a push. The folder picker cannot be
+  automated at all (see below).
 - **Not in the UI:** cliches (`CLICHE` / `CPXDATA`), the graphical group
   selector (`MAP_*`), supersessions (the `replacements` query exists but
   nothing renders it), and the accessories catalogue.
