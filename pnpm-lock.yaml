@@ -85,6 +85,9 @@ importers:
       buffer:
         specifier: ^6.0.3
         version: 6.0.3
+      mdb-reader:
+        specifier: ^3.2.0
+        version: 3.2.0
       sqlite-wasm-http:
         specifier: ^1.2.0
         version: 1.2.0(patch_hash=d8a8457ce44e88cb53bb1db2cad75fcca357a39b81560b3ac97938c2d9dd2c74)

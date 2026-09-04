@@ -321,6 +321,38 @@ The general rule this is an instance of: **the local sources need a
 self-contained tree.** Anything that makes the tree cheaper by pointing outside
 it buys that saving with the folder and browser-storage modes.
 
+## Two console warnings are expected, and both are answers not faults
+
+The browser prints these on every load. Neither is a bug, and one of them is a
+decision being reported back:
+
+```
+Ignoring inability to install OPFS sqlite3_vfs: Cannot install OPFS:
+Missing SharedArrayBuffer and/or Atomics. The server must emit the
+COOP/COEP response headers to enable those.
+```
+
+SQLite probes for the standard `opfs` VFS at startup. It needs
+`SharedArrayBuffer`, which needs `Cross-Origin-Opener-Policy` and
+`Cross-Origin-Embedder-Policy` on the origin — and requiring those of whoever
+hosts a tree would undo the point of it being servable from anywhere. So we do
+not send them, the probe fails, and the word _Ignoring_ is the library saying
+it coped. Note it is the **read** path complaining: reading goes over `Range`
+and never wanted OPFS at all. The importer, which does need to write, uses the
+SAH-pool VFS precisely because it installs without those headers.
+
+```
+Page size for …/catalogue.sqlite is 4096, recommended size is 1024
+```
+
+`sqlite-wasm-http` advising us to minimise bytes per request. 4096 is deliberate
+and measured: the 92-request / 597 kB session figure is at 4096, because over a
+link with real latency, fewer large reads beat four times as many small ones.
+
+Both come from `console.warn` inside bundled dependencies, so neither can be
+silenced without patching them. Do not "fix" either by adding the headers or
+dropping the page size — that would trade a measured win for a quieter log.
+
 ## The browser's SQLite is fussy, and three fixes are load-bearing
 
 - **`pool.exec` does not return rows.** It is typed `RowObject[]` but returns

@@ -18,6 +18,7 @@
     "@eperx/ktd": "workspace:*",
     "@sqlite.org/sqlite-wasm": "3.53.0-build1",
     "buffer": "^6.0.3",
+    "mdb-reader": "^3.2.0",
     "sqlite-wasm-http": "^1.2.0"
   },
   "devDependencies": {

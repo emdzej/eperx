@@ -10,3 +10,7 @@ build/
 __pycache__/
 *.pyc
 *.tsbuildinfo
+
+# The import harness's own bundle, built on demand by
+# apps/web/harness/vite.config.ts.
+dist-harness/
