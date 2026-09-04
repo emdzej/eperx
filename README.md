@@ -25,6 +25,9 @@ Working today:
   part-number search, and every drawing a part appears on. SQLite runs in a
   worker and reads the database over `Range`; no backend, nothing downloaded
   up front.
+- **Three ways to open a tree** — over HTTP, from a local folder read in
+  place, or copied into the browser's own storage. All three go through the
+  same `Range` requests, so nothing above the transport knows which it got.
 - `@eperx/catalogue` — the queries, transport-agnostic, so the CLI and the
   browser run the same SQL.
 - `@eperx/ktd` — reader for **F3**, ePER's own chassis format: 41.4 M chassis
@@ -33,7 +36,7 @@ Working today:
   `Range`, a local file, or Node `fs`, behind one `read(pos, len)`.
 - `@eperx/catalogue` also holds the `PATTERN` parser and its three-valued
   evaluator, with 36 tests.
-- `eperx` CLI — `disc`, `tables`, `import`, `browse`, `part`,
+- `eperx` CLI — `disc`, `tables`, `import`, `serve`, `browse`, `part`,
   `applicability`, `vin`, `f3`, `image`.
 - 55 tables and 8,534,325 rows understood, with the hierarchy, the description
   joins and the two schema traps documented.
@@ -197,32 +200,45 @@ own index is keyed, so nothing VIN-specific is needed beyond splitting the two
 out. The answer is that chassis's exact version, engine number, build date
 and — from `SP.RT` — the options and characteristics it left the factory with.
 
-### Run the browser client
-
-`pnpm dev` serves an imported tree at `/data`, honouring `Range`:
+### Serve a tree
 
 ```sh
-EPERX_DATA="$PWD/data" pnpm dev
+node $cli serve -d data            # http://127.0.0.1:8998, Range + CORS
+node $cli serve -d data -p 9000 -v # another port, logging each request
 ```
 
-Use an **absolute** path: Vite runs with `apps/web` as its working directory,
-so a relative one resolves against that. A path that is not a directory is
-reported at startup rather than 404ing every request later.
+A read-only static file server, which is all the client needs — and the
+deployment story made runnable. It reports a running count of requests and
+bytes, so it is visible that the client reads pages rather than downloading
+files.
 
-`pnpm preview` takes the same variable and serves the production bundle, which
-is the closest thing to how this is actually deployed — same request counts,
-verified.
+### Run the browser client
+
+```sh
+pnpm dev          # http://localhost:5173
+```
+
+Then choose one of three sources on the opening screen:
+
+|                              |                                                                                                                                                                                                       |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Over HTTP**                | Any static host that honours `Range` — `eperx serve`, or a URL. Nothing is stored in the browser.                                                                                                     |
+| **A folder on this machine** | Read in place, **nothing copied**. A service worker answers the reads from the folder, so the 5.7 GB of drawings and chassis files stay where they are. Chromium only.                                |
+| **Stored in this browser**   | Copied into the origin private file system, so it opens on reload with no folder permission and no disc mounted. Shows the size against the browser's quota and refuses rather than failing part-way. |
 
 The client **rejects a host that ignores `Range`** rather than reading the
 wrong bytes out of a full-body response. The footer shows how many statements
-a click cost; the byte figures come from the dev server, which counts them
-(`EPERX_TRACE=1`, or read `/__eperx-traffic`).
+a click cost.
+
+`pnpm dev` can also serve a tree itself at `/data` with
+`EPERX_DATA="$PWD/data"` — an **absolute** path, because Vite runs with
+`apps/web` as its working directory. `eperx serve` is usually simpler.
 
 | Script           | What it does                                          |
 | ---------------- | ----------------------------------------------------- |
 | `pnpm build`     | Build every package and the web app                   |
-| `pnpm dev`       | Run the browser client (see `EPERX_DATA` above)       |
-| `pnpm preview`   | Serve the production bundle, same `EPERX_DATA`        |
+| `pnpm dev`       | Run the browser client                                |
+| `pnpm preview`   | Serve the production bundle                           |
 | `pnpm test`      | Unit tests                                            |
 | `pnpm typecheck` | Packages via `tsc`, the Svelte app via `svelte-check` |
 | `pnpm check`     | Build, typecheck and test                             |

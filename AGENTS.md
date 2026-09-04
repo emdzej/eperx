@@ -195,6 +195,14 @@ Traps found while doing this:
   it and test it in the same command, and bind it explicitly with
   `--host 127.0.0.1` — Vite reports `localhost` but a request to `127.0.0.1`
   can still fail to connect.
+- **`npx` can hang.** It did, for minutes, with only the `npm exec` wrapper
+  alive and no vite process behind it. Call the binary —
+  `node node_modules/vite/bin/vite.js` — and give startup 30s before
+  concluding anything is wrong.
+- **The folder picker cannot be automated.** An OPFS directory handle is the
+  same type `showDirectoryPicker` returns, so staging a tree in an OPFS
+  subdirectory and mounting _that_ exercises the identical code path. That is
+  how the directory mode is tested.
 - **Check that an edit applied.** `pnpm format` reflows these files, so an
   exact-match edit written against remembered text silently matches nothing.
   Two index changes were "made" and then found still absent from the built
@@ -223,6 +231,35 @@ all numeric.** They roll into letters as a series fills, so the Fiat 500 has a
 numeric run, a `J` run and an `O` run. Those do not compare as one ordered
 space, and "is this chassis beyond what the disc holds?" is only answerable
 within a series.
+
+## Local data goes through a service worker, and that is not incidental
+
+Three sources — a remote host, a folder the user picked, and a tree copied into
+OPFS — and **one transport**. Everything above `lib/mount.ts` issues HTTP
+`Range` requests, and `public/sw.js` makes local files answer them.
+
+The reason is not tidiness. SQLite's VFS reads are **synchronous**, and the
+only synchronous file access a browser offers is `createSyncAccessHandle()`,
+which works on OPFS files and nothing else — verified in a worker, where it is
+also the only place it exists. A picked directory can only be read
+asynchronously. Answering `fetch` is asynchronous by nature, so routing through
+a worker turns the async file API into the one thing SQLite can consume.
+
+The alternative was copying `catalogue.sqlite` into OPFS so SQLite could read
+it — 568 MB duplicated to open a folder. This copies nothing, and it means the
+OPFS mode needs no second VFS either.
+
+Two lifecycle details are load-bearing, and both fail as "file not found":
+
+- **Wait for the worker to control the page.** A freshly registered worker does
+  not control the page that registered it until it activates and claims
+  clients; a fetch before that goes to the network and 404s.
+- **Wait for the mount to be acknowledged.** Posting a directory handle and
+  immediately fetching races the worker's message queue.
+
+`sw.js` handles `HEAD` and suffix ranges (`bytes=-N`) as well as normal ones —
+`HEAD` is how a client learns a file's size, and the suffix form is how a ZIP's
+end-of-central-directory gets found.
 
 ## The browser's SQLite is fussy, and three fixes are load-bearing
 

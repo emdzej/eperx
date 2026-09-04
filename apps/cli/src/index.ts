@@ -29,6 +29,7 @@ import {
   whereUsed,
 } from "@eperx/catalogue";
 import { checkApplicability } from "./applicability.js";
+import { serve } from "./serve.js";
 import { lookupVehicle } from "./vin.js";
 import { openCatalogue } from "./browse.js";
 import { openDisc } from "./disc.js";
@@ -545,6 +546,44 @@ program
     } finally {
       source.close();
     }
+  });
+
+program
+  .command("serve")
+  .description("serve an imported tree over HTTP with Range support")
+  .requiredOption("-d, --data <dir>", "an imported tree")
+  .option("-p, --port <n>", "port", (v) => Number(v), 8998)
+  .option("--host <host>", "interface to bind", "127.0.0.1")
+  .option("-v, --verbose", "log every request")
+  .action(async (options) => {
+    const serving = await serve({
+      root: options.data,
+      port: options.port,
+      host: options.host,
+      verbose: options.verbose,
+    });
+    console.log(`${chalk.bold("eperx")} serving ${options.data}`);
+    console.log(`  ${serving.url}`);
+    console.log(chalk.dim(`  Range supported, CORS open. Ctrl-C to stop.`));
+
+    // A running count, so it is obvious the client is reading pages rather
+    // than downloading files.
+    const timer = setInterval(() => {
+      const { requests, bytes } = serving.stats();
+      if (requests) {
+        process.stderr.write(`\r\x1b[K  ${requests} requests, ${(bytes / 1e6).toFixed(1)} MB sent`);
+      }
+    }, 1000);
+
+    const stop = () => {
+      clearInterval(timer);
+      const { requests, bytes } = serving.stats();
+      process.stderr.write("\r\x1b[K");
+      console.log(`\n${requests} requests, ${(bytes / 1e6).toFixed(1)} MB sent`);
+      void serving.close().then(() => process.exit(0));
+    };
+    process.on("SIGINT", stop);
+    process.on("SIGTERM", stop);
   });
 
 program

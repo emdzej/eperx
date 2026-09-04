@@ -1,6 +1,7 @@
 import type { Catalogue, Rows, SqlValue } from "@eperx/catalogue";
 import { languages, type Language } from "@eperx/catalogue";
 import { createSQLiteHTTPPool, type SQLiteHTTPPool } from "sqlite-wasm-http";
+import type { MountKind } from "./mount";
 
 /**
  * The connection to an imported tree.
@@ -18,8 +19,16 @@ import { createSQLiteHTTPPool, type SQLiteHTTPPool } from "sqlite-wasm-http";
  * whole point of serving the tree from anywhere.
  */
 export interface TreeState {
-  /** Base URL of the imported tree, e.g. `/data`. */
+  /**
+   * Base URL the tree is read through.
+   *
+   * `/data` for a remote host, or `/__eperx/directory` / `/__eperx/opfs` for a
+   * local one — the service worker makes those answer `Range` requests too,
+   * so nothing downstream knows the difference. See `lib/mount.ts`.
+   */
   base: string;
+  /** Where the bytes are coming from, for the UI to say. */
+  kind: MountKind;
   pool?: SQLiteHTTPPool;
   catalogue?: Catalogue;
   languages: Language[];
@@ -31,6 +40,7 @@ export interface TreeState {
 
 export const tree = $state<TreeState>({
   base: "/data",
+  kind: "remote",
   languages: [],
   connecting: false,
 });
@@ -72,12 +82,24 @@ function rowsFrom(pool: SQLiteHTTPPool): Rows {
   };
 }
 
-export async function connect(base: string, language?: string): Promise<void> {
+/**
+ * Open a tree at an already-mounted base URL.
+ *
+ * Mounting is separate (`lib/mount.ts`) because it is what differs between a
+ * remote host, a picked folder and OPFS; everything from here on is identical
+ * for all three.
+ */
+export async function connect(
+  base: string,
+  options: { kind?: MountKind; language?: string } = {},
+): Promise<void> {
   tree.connecting = true;
   tree.error = undefined;
   try {
     await disconnect();
     tree.base = base.replace(/\/$/, "");
+    tree.kind = options.kind ?? "remote";
+    const language = options.language;
 
     // `sync` is chosen deliberately, not fallen back into. The shared-cache
     // backend needs `SharedArrayBuffer`, which needs
