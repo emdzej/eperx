@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ByteSource } from "@eperx/core";
+import { RangeFile, type CsFile } from "@emdzej/csfs-core";
 import { F3Table } from "./table.js";
 import { chassisFromVin, typeCodeFromVin } from "./vin.js";
 import { readHeader } from "./header.js";
@@ -158,17 +158,23 @@ function concat(parts: Uint8Array[]): Uint8Array {
   return out;
 }
 
-function memorySource(bytes: Uint8Array): ByteSource & { reads: number } {
-  return {
-    reads: 0,
-    async size() {
-      return bytes.length;
-    },
-    async read(pos: number, len: number) {
-      this.reads++;
-      return bytes.subarray(pos, pos + len);
-    },
-  };
+/**
+ * A {@link CsFile} over bytes in memory that counts reads through it.
+ *
+ * `RangeFile` because slicing it is arithmetic and nothing reaches the reader
+ * until bytes are asked for — which is what makes "the index was
+ * binary-searched, not scanned" assertable. The counter hangs off the file so
+ * call sites can keep passing it straight in, and lives in a closure so a
+ * slice counts against the same total.
+ */
+function memorySource(bytes: Uint8Array): CsFile & { reads: number } {
+  let reads = 0;
+  const file = new RangeFile("/table.FCTLR", bytes.length, async (start, end) => {
+    reads++;
+    return bytes.subarray(start, end);
+  }) as unknown as CsFile & { reads: number };
+  Object.defineProperty(file, "reads", { get: () => reads });
+  return file;
 }
 
 const identity = (input: Uint8Array): Uint8Array => input;

@@ -32,7 +32,7 @@ import {
   type Usage,
   type Version,
 } from "@eperx/catalogue";
-import { HttpSource } from "./http-source";
+import { required } from "./filesystem";
 import { clearSelection, readSelection, writeSelection, type SavedVehicle } from "./selection";
 import { tree } from "./tree.svelte";
 import { lookupVin, vin, vinSpecification, vinSummary } from "./vin.svelte";
@@ -269,8 +269,11 @@ async function loadImage(drawing: Drawing): Promise<void> {
     return;
   }
 
-  const source = new HttpSource(`${tree.base}/images/${location.shard}.res`);
-  const bytes = await source.read(location.offset, location.length);
+  if (!tree.fs) throw new Error("the tree is not open");
+  const shard = await required(tree.fs, `images/${location.shard}.res`);
+  // The byte range came from the `images` index built at import time, so this
+  // is one read and no central directory: see the note in `packages/res`.
+  const bytes = await shard.slice(location.offset, location.offset + location.length).bytes();
   if (bytes.length !== location.length) {
     throw new Error(`short read: wanted ${location.length} bytes, got ${bytes.length}`);
   }

@@ -321,6 +321,57 @@ The general rule this is an instance of: **the local sources need a
 self-contained tree.** Anything that makes the tree cheaper by pointing outside
 it buys that saving with the folder and browser-storage modes.
 
+## Reading bytes is csfs's job, not ours
+
+eperx had its own storage layer — a `ByteSource` with `size()`/`read(pos, len)`,
+`HttpSource` over `fetch`, a `FileSource` over `node:fs`, `SourceFs`/`TargetFs`
+in the importer. All of it is now [csfs](https://github.com/emdzej/csfs), which
+is that layer generalised into a library and MIT licensed, so PolyForm can
+consume it.
+
+The translation is almost nothing, which is the point: csfs models a file on
+`Blob`, so `read(pos, len)` is `slice(pos, pos + len).bytes()` and `size()` is
+a property. `@eperx/res` and `@eperx/ktd` take a `CsFile` and never learn which
+backend produced it.
+
+| eperx's own             | csfs                                  |
+| ----------------------- | ------------------------------------- |
+| `ByteSource`            | `CsFile`                              |
+| `HttpSource`            | `@emdzej/csfs-http`                   |
+| `FileSource`            | `@emdzej/csfs-node`                   |
+| `SourceFs` / `TargetFs` | `CsFileSystem` / `WritableFileSystem` |
+| `BrowserSourceFs`       | `@emdzej/csfs-fsa`                    |
+| `BrowserTargetFs`       | `@emdzej/csfs-opfs`                   |
+
+Four things did **not** move, and each for a reason:
+
+- **The service worker.** It is not about reading files. `sqlite-wasm-http`
+  wants a URL and SQLite's VFS reads are synchronous, which no folder handle
+  can answer, so `catalogue.sqlite` still goes through the shim. Everything
+  else is now read directly — in a picked folder the drawings no longer take
+  that detour.
+- **`--link`.** A symlink is a fact about a real filesystem and no browser is
+  on one, so csfs rightly has no concept of it. `importImages` takes an
+  optional `place` callback and the CLI supplies a symlinking one, using
+  `NodeFileSystem.rootPath` to reconstruct both ends.
+- **Latin-1 text.** `CsFile.text()` decodes UTF-8. `runparam.ini` is a
+  Windows-era INI, so `disc.ts` reads bytes and decodes them itself.
+- **The `images` index.** csfs-zip could address a drawing as
+  `/images/BA.res#/BA/x.png`, and eperx would dodge the multi-archive fan-out
+  because a shard's name _is_ the first two hex characters of the path. It is
+  still not worth it: a shard's central directory measures **69 kB** against
+  about 12 kB for an indexed lookup in the table we already build, and that
+  table costs 15 MB of tree once. Measured, not assumed — see
+  `re/` if you want to redo it.
+
+Two consequences worth knowing. `CsFile.bytes()` returns a plain `Uint8Array`,
+so the `JetBuffer` wrapping moved out to each caller — `Buffer.from(await
+file.arrayBuffer())`, which is a view and copies nothing. And **the HTTP
+backend needs a manifest**: a static host cannot list a directory, so
+`eperx import` writes `csfs-manifest.json` and the app will not open a tree
+without one. It is small because the shards stay packed — 267 entries and 9 kB
+for 6.52 GB, against the 14.72 MB an extracted tree would need.
+
 ## The importer has two homes, and neither owns the filesystem
 
 `@eperx/importer` holds every piece of format knowledge and none of the I/O. It

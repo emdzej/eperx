@@ -29,9 +29,14 @@ import {
   MANIFEST,
   openDisc,
   type Disc,
+  type JetBuffer,
 } from "@eperx/importer";
 import MDBReader from "mdb-reader";
-import { BrowserSourceFs, BrowserTargetFs, clearImportPool, openWasmSqlWriter } from "./browser-fs";
+import { Buffer } from "buffer";
+import type { CsFile, CsFileSystem, WritableFileSystem } from "@emdzej/csfs-core";
+import { fsaFileSystem } from "@emdzej/csfs-fsa";
+import { opfsFileSystem } from "@emdzej/csfs-opfs";
+import { clearImportPool, openWasmSqlWriter } from "./sql-writer";
 
 /** Look at a disc and report what it holds, without writing anything. */
 export interface ScanRequest {
@@ -87,17 +92,36 @@ self.onmessage = async (event: MessageEvent<ImportRequest>) => {
 };
 
 /**
+ * A whole Jet database, as mdb-reader needs it.
+ *
+ * `Buffer.from(ArrayBuffer)` is a view, so this costs no second copy of the
+ * 1.27 GB. The wrapper is not optional: mdb-reader reads Jet's pages with
+ * `readUInt32LE` and friends, which a plain `Uint8Array` does not have — which
+ * is what `JetBuffer` exists to catch at compile time.
+ */
+async function jetBytes(file: CsFile): Promise<JetBuffer> {
+  return Buffer.from(await file.arrayBuffer()) as unknown as JetBuffer;
+}
+
+/** A file the disc promised, or an error naming it. */
+async function must(fs: CsFileSystem, path: string): Promise<CsFile> {
+  const file = await fs.file(path);
+  if (!file) throw new Error(`${path} is missing from this disc`);
+  return file;
+}
+
+/**
  * Size the components without reading them.
  *
- * Every figure comes from `statFile`, so this costs a directory walk rather
+ * Every figure comes from a listing, so this costs a directory walk rather
  * than a byte of I/O — which is what makes it reasonable to do before asking
  * the user whether to proceed.
  */
 async function scan(request: ScanRequest): Promise<void> {
-  const fs = new BrowserSourceFs(request.source);
+  const fs = fsaFileSystem(request.source);
   const disc = await openDisc(fs);
 
-  const sizeOf = async (path?: string) => (path ? ((await fs.statFile(path))?.size ?? 0) : 0);
+  const sizeOf = async (path?: string) => (path ? ((await fs.file(path))?.size ?? 0) : 0);
   const imagesBytes = disc.files.imagesDir ? await dirBytes(fs, disc.files.imagesDir) : 0;
 
   say({
@@ -124,12 +148,12 @@ async function scan(request: ScanRequest): Promise<void> {
   });
 }
 
-async function dirBytes(fs: BrowserSourceFs, dir: string): Promise<number> {
-  let total = 0;
-  for (const name of await fs.list(dir)) {
-    total += (await fs.statFile(`${dir}/${name}`))?.size ?? 0;
-  }
-  return total;
+async function dirBytes(fs: CsFileSystem, dir: string): Promise<number> {
+  const handle = await fs.directory(dir);
+  if (!handle) return 0;
+  // `entries()` carries sizes, so this is one listing rather than a stat per
+  // shard — and there are 261 of them.
+  return (await handle.entries()).reduce((n, e) => n + (e.kind === "file" ? e.size : 0), 0);
 }
 
 /**
@@ -146,14 +170,15 @@ async function dirBytes(fs: BrowserSourceFs, dir: string): Promise<number> {
  * offers "every language" without a breakdown rather than inventing one.
  */
 async function discLanguages(
-  fs: BrowserSourceFs,
+  fs: CsFileSystem,
   disc: Disc,
 ): Promise<{ code: string; name: string }[]> {
   if (!disc.files.accessories) return [];
-  const file = await fs.open(disc.files.accessories);
+  const file = await fs.file(disc.files.accessories);
+  if (!file) return [];
   try {
     const reader = new MDBReader(
-      (await file.bytes()) as ConstructorParameters<typeof MDBReader>[0],
+      (await jetBytes(file)) as ConstructorParameters<typeof MDBReader>[0],
     );
     const rows = reader.getTable("LANG").getData() as Record<string, unknown>[];
     return rows
@@ -165,14 +190,12 @@ async function discLanguages(
     // copes with an empty list; refusing the whole scan over it would not be
     // proportionate.
     return [];
-  } finally {
-    file.close();
   }
 }
 
 async function run(request: RunRequest): Promise<void> {
-  const fs = new BrowserSourceFs(request.source);
-  const target = new BrowserTargetFs(await navigator.storage.getDirectory());
+  const fs = fsaFileSystem(request.source);
+  const target = await opfsFileSystem();
   const disc = await openDisc(fs);
 
   if (!disc.files.spareParts) throw new Error("this disc has no spare-parts database");
@@ -183,34 +206,28 @@ async function run(request: RunRequest): Promise<void> {
 
   say({ kind: "phase", phase: "catalogue", detail: CATALOGUE_DB });
   const catalogueWriter = await openWasmSqlWriter(CATALOGUE_DB);
-  const spareFile = await fs.open(disc.files.spareParts);
-  let spare;
-  try {
-    spare = convertDatabase({
-      bytes: await spareFile.bytes(),
-      writer: catalogueWriter,
-      indexes: CATALOGUE_INDEXES,
-      languages: request.languages,
-      onProgress: ({ table, rows, totalRows, tableIndex, tableCount }) =>
-        say({
-          kind: "progress",
-          done: tableIndex,
-          total: tableCount,
-          label: `${table} ${rows.toLocaleString()}/${totalRows.toLocaleString()}`,
-        }),
-    });
-  } finally {
-    spareFile.close();
-  }
+  const spareFile = await must(fs, disc.files.spareParts);
+  const spare = convertDatabase({
+    bytes: await jetBytes(spareFile),
+    writer: catalogueWriter,
+    indexes: CATALOGUE_INDEXES,
+    languages: request.languages,
+    onProgress: ({ table, rows, totalRows, tableIndex, tableCount }) =>
+      say({
+        kind: "progress",
+        done: tableIndex,
+        total: tableCount,
+        label: `${table} ${rows.toLocaleString()}/${totalRows.toLocaleString()}`,
+      }),
+  });
 
   let accessories;
   if (request.accessories && disc.files.accessories) {
     say({ kind: "phase", phase: "accessories", detail: ACCESSORIES_DB });
     const writer = await openWasmSqlWriter(ACCESSORIES_DB);
-    const file = await fs.open(disc.files.accessories);
-    try {
+    {
       accessories = convertDatabase({
-        bytes: await file.bytes(),
+        bytes: await jetBytes(await must(fs, disc.files.accessories)),
         writer,
         indexes: ACCESSORIES_INDEXES,
         languages: request.languages,
@@ -222,8 +239,6 @@ async function run(request: RunRequest): Promise<void> {
             label: `${table} ${rows.toLocaleString()}`,
           }),
       });
-    } finally {
-      file.close();
     }
     finaliseDatabase(writer);
     await place(target, ACCESSORIES_DB, writer);
@@ -237,7 +252,7 @@ async function run(request: RunRequest): Promise<void> {
       imagesDir: disc.files.imagesDir,
       // Copied, never linked: a browser has no symlinks, and OPFS is the only
       // place these bytes can live once the disc is unmounted.
-      target: { fs: target, dir: "images", mode: "copy" },
+      target: { fs: target, dir: "images" },
       writer: catalogueWriter,
       onProgress: ({ shard, index, count }) =>
         say({ kind: "progress", done: index + 1, total: count, label: `${shard}.res` }),
@@ -246,7 +261,7 @@ async function run(request: RunRequest): Promise<void> {
 
   if (request.chassis && (disc.files.chassis || disc.files.build)) {
     say({ kind: "phase", phase: "chassis", detail: "chassis/" });
-    await target.mkdir("chassis");
+    await target.makeDirectory("chassis");
   }
   const chassis: Record<string, string> = {};
   if (request.chassis) {
@@ -256,14 +271,11 @@ async function run(request: RunRequest): Promise<void> {
     ] as const;
     for (const [key, path] of wanted) {
       if (!path) continue;
-      const file = await fs.open(path);
-      try {
-        say({ kind: "progress", done: 0, total: 1, label: file.name });
-        await target.copy(file, `chassis/${file.name}`);
-        chassis[key] = file.name;
-      } finally {
-        file.close();
-      }
+      const file = await must(fs, path);
+      say({ kind: "progress", done: 0, total: 1, label: file.name });
+      // Streamed, so 420 MB never lands in memory.
+      await target.write(`chassis/${file.name}`, file.stream());
+      chassis[key] = file.name;
     }
   }
 
@@ -273,22 +285,19 @@ async function run(request: RunRequest): Promise<void> {
   finaliseDatabase(catalogueWriter);
   await place(target, CATALOGUE_DB, catalogueWriter);
 
-  await target.writeText(
+  await writeJson(
+    target,
     MANIFEST,
-    JSON.stringify(
-      buildManifest({
-        version: disc.version,
-        release: disc.release,
-        importedAt: request.importedAt,
-        languages: request.languages,
-        catalogue: { tables: spare.tables.length, indexes: spare.indexes },
-        accessories: accessories && { tables: accessories.tables.length },
-        images: images && { dir: "images", shards: images.shards, entries: images.entries },
-        chassis: Object.keys(chassis).length ? chassis : undefined,
-      }),
-      null,
-      2,
-    ) + "\n",
+    buildManifest({
+      version: disc.version,
+      release: disc.release,
+      importedAt: request.importedAt,
+      languages: request.languages,
+      catalogue: { tables: spare.tables.length, indexes: spare.indexes },
+      accessories: accessories && { tables: accessories.tables.length },
+      images: images && { dir: "images", shards: images.shards, entries: images.entries },
+      chassis: Object.keys(chassis).length ? chassis : undefined,
+    }),
   );
 
   say({
@@ -308,11 +317,16 @@ async function run(request: RunRequest): Promise<void> {
  * back the bytes and they get written where a client will look for them.
  */
 async function place(
-  target: BrowserTargetFs,
+  target: WritableFileSystem,
   name: string,
   writer: { finish(): Promise<Uint8Array | undefined> },
 ): Promise<void> {
   const bytes = await writer.finish();
   if (!bytes) throw new Error(`${name} produced no bytes to place`);
-  await target.writeBytes(name, bytes);
+  await target.write(name, bytes);
+}
+
+/** Write JSON, since csfs writes bytes rather than text. */
+async function writeJson(target: WritableFileSystem, path: string, value: unknown): Promise<void> {
+  await target.write(path, new TextEncoder().encode(`${JSON.stringify(value, null, 2)}\n`));
 }

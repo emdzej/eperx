@@ -4,7 +4,8 @@
  * `showDirectoryPicker` needs a user gesture and cannot be automated, which
  * would leave the whole in-browser import unverifiable. The way round it:
  * OPFS directories are `FileSystemDirectoryHandle`s too, and that is the only
- * thing `BrowserSourceFs` requires. So a disc is staged into OPFS over HTTP
+ * thing csfs's picked-directory backend requires. So a disc is staged into
+ * OPFS over HTTP
  * and the real worker is pointed at it — every layer below the picker is the
  * shipping code.
  *

@@ -1,6 +1,6 @@
+import type { CsFile, CsFileSystem, WritableFileSystem } from "@emdzej/csfs-core";
 import { indexShard, SHARD_SUFFIX } from "@eperx/res";
 import { listShards } from "./disc.js";
-import type { SourceFs, TargetFs } from "./fs.js";
 import type { SqlWriter } from "./sql.js";
 
 /**
@@ -22,7 +22,7 @@ import type { SqlWriter } from "./sql.js";
  */
 
 export interface ImportImagesOptions {
-  sourceFs: SourceFs;
+  sourceFs: CsFileSystem;
   /** `<disc>/data/images`, relative to the source root. */
   imagesDir: string;
   /**
@@ -31,7 +31,18 @@ export interface ImportImagesOptions {
    * Indexing in place records byte ranges into files the tree does not
    * contain, which only makes sense when something else will serve the disc.
    */
-  target?: { fs: TargetFs; dir: string; mode: "copy" | "link" };
+  target?: {
+    fs: WritableFileSystem;
+    dir: string;
+    /**
+     * How a shard gets there. Defaults to streaming its bytes.
+     *
+     * The CLI overrides this for `--link`, which csfs has no concept of
+     * because no browser does — a symlink is a fact about a real filesystem,
+     * and only the Node backend is on one.
+     */
+    place?: (file: CsFile, to: string) => Promise<void>;
+  };
   /** The catalogue database, to write the `images` table into. */
   writer: SqlWriter;
   onProgress?: (event: { shard: string; index: number; count: number; entries: number }) => void;
@@ -47,7 +58,7 @@ export interface ImportImagesResult {
 
 export async function importImages(options: ImportImagesOptions): Promise<ImportImagesResult> {
   const shards = await listShards(options.sourceFs, options.imagesDir);
-  if (options.target) await options.target.fs.mkdir(options.target.dir);
+  if (options.target) await options.target.fs.makeDirectory(options.target.dir);
 
   const db = options.writer;
   db.exec("PRAGMA journal_mode = OFF");
@@ -70,9 +81,11 @@ export async function importImages(options: ImportImagesOptions): Promise<Import
 
   for (const [index, name] of shards.entries()) {
     const shard = name.slice(0, name.length - SHARD_SUFFIX.length);
-    const file = await options.sourceFs.open(`${options.imagesDir}/${name}`);
-    try {
-      const entries = await indexShard(file.source());
+    const path = `${options.imagesDir}/${name}`;
+    const file = await options.sourceFs.file(path);
+    if (!file) throw new Error(`${path} disappeared while indexing`);
+    {
+      const entries = await indexShard(file);
 
       db.exec("BEGIN");
       for (const entry of entries) {
@@ -82,23 +95,17 @@ export async function importImages(options: ImportImagesOptions): Promise<Import
 
       if (options.target) {
         const to = `${options.target.dir}/${name}`;
-        await options.target.fs.remove(to);
-        if (options.target.mode === "link") {
-          if (!options.target.fs.link) {
-            throw new Error("this target cannot link files, only copy them");
-          }
-          await options.target.fs.link(file, to);
-        } else {
-          await options.target.fs.copy(file, to);
-        }
+        const place =
+          options.target.place ??
+          // Streamed, so a 19 MB shard is never held whole.
+          ((from, at) => options.target!.fs.write(at, from.stream()));
+        await place(file, to);
       }
       result.shards++;
       result.entries += entries.length;
       result.deflated += entries.filter((e) => e.method !== 0).length;
       result.bytes += file.size;
       options.onProgress?.({ shard, index, count: shards.length, entries: entries.length });
-    } finally {
-      file.close();
     }
   }
 

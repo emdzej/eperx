@@ -91,7 +91,9 @@
             "Point this at a folder produced by `eperx import`.",
         );
       }
-      await connect(at, { kind });
+      // The handle goes too: csfs reads a picked folder directly, and only
+      // `catalogue.sqlite` still takes the service-worker route.
+      await connect(at, { kind, handle: options.handle });
       if (tree.catalogue) {
         await loadMakes();
         // A newly chosen source may well be the same catalogue as before, so

@@ -5,7 +5,7 @@ import {
   specificationFrom,
   type Specification,
 } from "@eperx/catalogue";
-import { HttpSource } from "./http-source";
+import { required } from "./filesystem";
 import { tree } from "./tree.svelte";
 
 /**
@@ -104,9 +104,11 @@ export async function lookupVin(query: string): Promise<void> {
       throw new Error(`VIN type code ${parts.typeCode} is not in this release's VIN table.`);
     }
 
+    if (!tree.fs) throw new Error("the tree is not open");
+
     if (where.files.chassis) {
       const table = await F3Table.open(
-        new HttpSource(`${tree.base}/${where.dir}/${where.files.chassis}`),
+        await required(tree.fs, `${where.dir}/${where.files.chassis}`),
       );
       const width = table.header.primaryKey.at(-1)?.length ?? 8;
       for (const model of vin.models) {
@@ -137,7 +139,7 @@ export async function lookupVin(query: string): Promise<void> {
 
     if (where.files.build) {
       const table = await F3Table.open(
-        new HttpSource(`${tree.base}/${where.dir}/${where.files.build}`),
+        await required(tree.fs, `${where.dir}/${where.files.build}`),
       );
       const width = table.header.keyLength - 3;
       for (const model of vin.model ? [vin.model] : vin.models) {

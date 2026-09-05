@@ -1,6 +1,8 @@
 import type { Catalogue, Rows, SqlValue } from "@eperx/catalogue";
 import { languages, type Language } from "@eperx/catalogue";
 import { createSQLiteHTTPPool, type SQLiteHTTPPool } from "sqlite-wasm-http";
+import type { CsFileSystem } from "@emdzej/csfs-core";
+import { dataFileSystem } from "./filesystem";
 import { verifyTree, type MountKind } from "./mount";
 
 /**
@@ -29,6 +31,15 @@ export interface TreeState {
   base: string;
   /** Where the bytes are coming from, for the UI to say. */
   kind: MountKind;
+  /**
+   * The tree's files — drawings and chassis records.
+   *
+   * Separate from `base` because they answer different needs: `base` is a URL
+   * for SQLite's sake, this is a filesystem for everything else. In a picked
+   * folder they are genuinely different paths to the same bytes, and only SQL
+   * has to go the long way round.
+   */
+  fs?: CsFileSystem;
   pool?: SQLiteHTTPPool;
   catalogue?: Catalogue;
   languages: Language[];
@@ -97,7 +108,12 @@ function rowsFrom(pool: SQLiteHTTPPool): Rows {
  */
 export async function connect(
   base: string,
-  options: { kind?: MountKind; language?: string } = {},
+  options: {
+    kind?: MountKind;
+    language?: string;
+    /** Needed for a picked folder, which csfs reads directly. */
+    handle?: FileSystemDirectoryHandle;
+  } = {},
 ): Promise<void> {
   tree.connecting = true;
   tree.error = undefined;
@@ -106,6 +122,7 @@ export async function connect(
     await disconnect();
     tree.base = base.replace(/\/$/, "");
     tree.kind = options.kind ?? "remote";
+    tree.fs = await dataFileSystem(tree.kind, { base: tree.base, handle: options.handle });
     const language = options.language;
 
     // `sync` is chosen deliberately, not fallen back into. The shared-cache
@@ -141,6 +158,7 @@ export async function connect(
     tree.error = error instanceof Error ? error.message : String(error);
     tree.pool = undefined;
     tree.catalogue = undefined;
+    tree.fs = undefined;
   } finally {
     tree.connecting = false;
   }
@@ -154,5 +172,6 @@ export async function disconnect(): Promise<void> {
   const pool = tree.pool;
   tree.pool = undefined;
   tree.catalogue = undefined;
+  tree.fs = undefined;
   if (pool) await pool.close();
 }

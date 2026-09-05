@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { inflateRawSync } from "node:zlib";
-import { basename, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { DatabaseSync } from "./sqlite.js";
 import { Command, Option } from "@commander-js/extra-typings";
 import chalk from "chalk";
@@ -35,10 +35,41 @@ import {
   importImages,
   MANIFEST,
   openDisc,
+  type JetBuffer,
 } from "@eperx/importer";
-import { NodeSourceFs, NodeTargetFs, openNodeSqlWriter } from "./node-fs.js";
+import type { CsFile, CsFileSystem, WritableFileSystem } from "@emdzej/csfs-core";
+import {
+  buildManifest as buildCsfsManifest,
+  formatManifest,
+  MANIFEST_FILE as CSFS_MANIFEST,
+} from "@emdzej/csfs-manifest";
+import { nodeFileSystem } from "@emdzej/csfs-node";
+import { openNodeSqlWriter } from "./sql-writer.js";
 import { F3Table } from "@eperx/ktd";
-import { FileSource } from "./node-source.js";
+
+/**
+ * A whole Jet database, as mdb-reader needs it.
+ *
+ * `Buffer.from(ArrayBuffer)` is a *view*, so this costs no second copy of
+ * 1.27 GB. The wrapper is not optional: mdb-reader reads Jet's pages with
+ * `readUInt32LE` and friends, which a plain `Uint8Array` does not have. See
+ * `JetBuffer` in `@eperx/importer`.
+ */
+async function jetBytes(file: CsFile): Promise<JetBuffer> {
+  return Buffer.from(await file.arrayBuffer()) as unknown as JetBuffer;
+}
+
+/** Write JSON, since csfs writes bytes rather than text. */
+async function writeJson(fs: WritableFileSystem, path: string, value: unknown): Promise<void> {
+  await fs.write(path, new TextEncoder().encode(`${JSON.stringify(value, null, 2)}\n`));
+}
+
+/** Resolve a path that must be there, or say which one was not. */
+async function must(fs: CsFileSystem, path: string): Promise<CsFile> {
+  const file = await fs.file(path);
+  if (!file) throw new Error(`${path} is missing from this disc`);
+  return file;
+}
 
 const program = new Command("eperx")
   .description("ePER disc tooling — inspect the databases, build a tree the browser can read")
@@ -49,7 +80,7 @@ program
   .description("report what an ePER disc carries")
   .argument("<disc>", "mounted disc, or its data directory")
   .action(async (path) => {
-    const disc = await openDisc(new NodeSourceFs(path));
+    const disc = await openDisc(nodeFileSystem(path));
     console.log(`${chalk.bold("ePER")} ${disc.version}  release ${disc.release}`);
     console.log(`  ${"data".padEnd(12)} ${join(path, disc.dataDir)}`);
     for (const [key, value] of Object.entries(disc.files)) {
@@ -67,17 +98,15 @@ program
       .default("spare-parts" as const),
   )
   .action(async (path, options) => {
-    const sourceFs = new NodeSourceFs(path);
+    const sourceFs = nodeFileSystem(path);
     const disc = await openDisc(sourceFs);
     const file =
       options.database === "accessories" ? disc.files.accessories : disc.files.spareParts;
     if (!file) throw new Error(`this disc has no ${options.database} database`);
 
-    const handle = await sourceFs.open(file);
     const reader = new MDBReader(
-      (await handle.bytes()) as ConstructorParameters<typeof MDBReader>[0],
+      (await jetBytes(await must(sourceFs, file))) as ConstructorParameters<typeof MDBReader>[0],
     );
-    handle.close();
     let total = 0;
     for (const name of reader.getTableNames().sort()) {
       const table = reader.getTable(name);
@@ -125,11 +154,27 @@ program
     },
   )
   .action(async (path, options) => {
-    const sourceFs = new NodeSourceFs(path);
+    const sourceFs = nodeFileSystem(path);
     const disc = await openDisc(sourceFs);
     const languages = options.languages?.split(",").map((s) => s.trim());
     mkdirSync(options.out, { recursive: true });
-    const targetFs = new NodeTargetFs(options.out);
+    const targetFs = nodeFileSystem(options.out);
+
+    /**
+     * Point at a file instead of copying it — `--link`.
+     *
+     * The one thing csfs cannot express, and rightly: a symlink is a fact
+     * about a real filesystem, and no browser is on one. The Node backend
+     * exposes the root it is mounted at, which is enough to reconstruct both
+     * ends. Absolute, so the link survives the tree being moved.
+     */
+    const link = async (file: CsFile, to: string): Promise<void> => {
+      const parts = (path: string) => path.split("/").filter(Boolean);
+      const at = join(targetFs.rootPath, ...parts(to));
+      mkdirSync(dirname(at), { recursive: true });
+      rmSync(at, { force: true });
+      symlinkSync(join(sourceFs.rootPath, ...parts(file.path)), at);
+    };
 
     if (!disc.files.spareParts) throw new Error("this disc has no spare-parts database");
 
@@ -153,20 +198,15 @@ program
 
     console.log(`\n${chalk.bold("catalogue")} → ${CATALOGUE_DB}`);
     const catalogueWriter = openNodeSqlWriter(replaceable(CATALOGUE_DB));
-    const spareFile = await sourceFs.open(disc.files.spareParts);
-    let spare;
-    try {
-      spare = convertDatabase({
-        bytes: await spareFile.bytes(),
-        writer: catalogueWriter,
-        indexes: CATALOGUE_INDEXES,
-        languages,
-        pageSize: options.pageSize,
-        onProgress: progress,
-      });
-    } finally {
-      spareFile.close();
-    }
+    const spareFile = await must(sourceFs, disc.files.spareParts);
+    const spare = convertDatabase({
+      bytes: await jetBytes(spareFile),
+      writer: catalogueWriter,
+      indexes: CATALOGUE_INDEXES,
+      languages,
+      pageSize: options.pageSize,
+      onProgress: progress,
+    });
     process.stderr.write("\r\x1b[K");
     report(spare);
 
@@ -174,19 +214,14 @@ program
     if (options.accessories && disc.files.accessories) {
       console.log(`\n${chalk.bold("accessories")} → ${ACCESSORIES_DB}`);
       const writer = openNodeSqlWriter(replaceable(ACCESSORIES_DB));
-      const file = await sourceFs.open(disc.files.accessories);
-      try {
-        accessories = convertDatabase({
-          bytes: await file.bytes(),
-          writer,
-          indexes: ACCESSORIES_INDEXES,
-          languages,
-          pageSize: options.pageSize,
-          onProgress: progress,
-        });
-      } finally {
-        file.close();
-      }
+      accessories = convertDatabase({
+        bytes: await jetBytes(await must(sourceFs, disc.files.accessories)),
+        writer,
+        indexes: ACCESSORIES_INDEXES,
+        languages,
+        pageSize: options.pageSize,
+        onProgress: progress,
+      });
       finaliseDatabase(writer);
       await writer.finish();
       process.stderr.write("\r\x1b[K");
@@ -201,7 +236,7 @@ program
         sourceFs,
         imagesDir: disc.files.imagesDir,
         target: copying
-          ? { fs: targetFs, dir: "images", mode: options.link ? "link" : "copy" }
+          ? { fs: targetFs, dir: "images", place: options.link ? link : undefined }
           : undefined,
         writer: catalogueWriter,
         onProgress: ({ shard, index, count }) => {
@@ -224,27 +259,22 @@ program
     let chassis;
     if (options.chassis && (disc.files.chassis || disc.files.build)) {
       console.log(`\n${chalk.bold("chassis")} → chassis/`);
-      await targetFs.mkdir("chassis");
+      await targetFs.makeDirectory("chassis");
       chassis = {} as Record<string, string>;
       for (const [key, from] of [
         ["chassis", disc.files.chassis],
         ["build", disc.files.build],
       ] as const) {
         if (!from) continue;
-        const file = await sourceFs.open(from);
-        try {
-          const to = `chassis/${file.name}`;
-          await targetFs.remove(to);
-          if (options.link) await targetFs.link(file, to);
-          else await targetFs.copy(file, to);
-          chassis[key] = file.name;
-          console.log(
-            `  ${file.name}  ${(file.size / 1e6).toFixed(0)} MB` +
-              (options.link ? chalk.dim(" (linked)") : ""),
-          );
-        } finally {
-          file.close();
-        }
+        const file = await must(sourceFs, from);
+        const to = `chassis/${file.name}`;
+        if (options.link) await link(file, to);
+        else await targetFs.write(to, file.stream());
+        chassis[key] = file.name;
+        console.log(
+          `  ${file.name}  ${(file.size / 1e6).toFixed(0)} MB` +
+            (options.link ? chalk.dim(" (linked)") : ""),
+        );
       }
     }
 
@@ -253,27 +283,48 @@ program
     finaliseDatabase(catalogueWriter);
     await catalogueWriter.finish();
 
-    await targetFs.writeText(
-      MANIFEST,
-      JSON.stringify(
-        buildManifest({
-          version: disc.version,
-          release: disc.release,
-          importedAt: new Date().toISOString(),
-          languages,
-          catalogue: { tables: spare.tables.length, indexes: spare.indexes },
-          accessories: accessories && { tables: accessories.tables.length },
-          images: images && {
-            dir: options.indexImagesInPlace ? null : "images",
-            shards: images.shards,
-            entries: images.entries,
-          },
-          chassis,
-          linked: options.link,
-        }),
-        null,
-        2,
-      ) + "\n",
+    const manifest = buildManifest({
+      version: disc.version,
+      release: disc.release,
+      importedAt: new Date().toISOString(),
+      languages,
+      catalogue: { tables: spare.tables.length, indexes: spare.indexes },
+      accessories: accessories && { tables: accessories.tables.length },
+      images: images && {
+        dir: options.indexImagesInPlace ? null : "images",
+        shards: images.shards,
+        entries: images.entries,
+      },
+      chassis,
+      linked: options.link,
+    });
+    await writeJson(targetFs, MANIFEST, manifest);
+
+    // A static host cannot list a directory, so a tree that will be served
+    // over HTTP has to describe itself. Cheap here: the shards stay packed, so
+    // this is about 266 entries rather than the 228,226 an extracted tree
+    // would need.
+    //
+    // Built from the tree rather than from what we just wrote, so it records
+    // what is actually there — including, for a `--link` tree, the real sizes
+    // behind the symlinks.
+    const described = await buildCsfsManifest(targetFs, {
+      label: `ePER ${disc.version} release ${disc.release}`,
+      builtAt: manifest.importedAt,
+      // The manifest cannot describe itself, and `.DS_Store` and friends are
+      // the operating system's litter rather than part of the tree.
+      filter: (path) => {
+        const name = path.slice(path.lastIndexOf("/") + 1);
+        return name !== CSFS_MANIFEST && !name.startsWith(".");
+      },
+    });
+    await targetFs.write(
+      CSFS_MANIFEST,
+      new TextEncoder().encode(`${formatManifest(described, { pretty: true })}\n`),
+    );
+    console.log(
+      `  ${CSFS_MANIFEST}  ${Object.keys(described.files).length} entries ` +
+        chalk.dim("(so a static host can be listed)"),
     );
 
     console.log(`\ndone in ${((Date.now() - started) / 1000).toFixed(0)}s → ${options.out}`);
@@ -495,7 +546,7 @@ program
   .option("-m, --model <cod>", "MOD_COD, when you have no VIN")
   .option("-c, --chassis <number>", "chassis number, when you have no VIN")
   .action(async (vin, options) => {
-    const discFs = new NodeSourceFs(options.disc);
+    const discFs = nodeFileSystem(options.disc);
     const disc = await openDisc(discFs);
     const db = new DatabaseSync(join(options.data, CATALOGUE_DB), { readOnly: true });
     try {
@@ -552,9 +603,12 @@ program
   .option("-b, --block <n>", "dump this block's rows", "0")
   .option("-n, --rows <n>", "how many rows to print", "5")
   .action(async (file, options) => {
-    const source = new FileSource(file);
-    try {
-      const table = await F3Table.open(source);
+    // Rooted at the file's directory, because csfs paths are relative to a
+    // root and this argument is a path to one file anywhere on the machine.
+    const handle = await nodeFileSystem(dirname(resolve(file))).file(basename(file));
+    if (!handle) throw new Error(`${file} is not a readable file`);
+    {
+      const table = await F3Table.open(handle);
       const h = table.header;
       console.log(
         `${chalk.bold(h.table)}  ${h.records.toLocaleString()} records, ` +
@@ -592,8 +646,6 @@ program
               .join("  "),
         );
       }
-    } finally {
-      source.close();
     }
   });
 
@@ -660,10 +712,10 @@ program
     db.close();
     if (!row) throw new Error(`${entry} is not in the image index`);
 
-    const shardPath = join(options.data, "images", `${row.shard}.res`);
-    const source = new FileSource(shardPath);
-    try {
-      const bytes = await source.read(row.offset, row.length);
+    const shard = await nodeFileSystem(options.data).file(`images/${row.shard}.res`);
+    if (!shard) throw new Error(`images/${row.shard}.res is not in this tree`);
+    {
+      const bytes = await shard.slice(row.offset, row.offset + row.length).bytes();
       if (bytes.length !== row.length) {
         throw new Error(`short read: wanted ${row.length} bytes, got ${bytes.length}`);
       }
@@ -677,8 +729,6 @@ program
           (row.method === 0 ? ", stored" : ", inflated") +
           ")",
       );
-    } finally {
-      source.close();
     }
   });
 

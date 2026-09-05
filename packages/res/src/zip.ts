@@ -1,4 +1,4 @@
-import type { ByteSource } from "@eperx/core";
+import type { CsFile } from "@emdzej/csfs-core";
 
 /**
  * Just enough ZIP to read ePER's drawing shards.
@@ -72,8 +72,8 @@ export interface ZipPayload {
  */
 const EOCD_PROBES = [1024, EOCD_SIZE + 0xffff];
 
-export async function readCentralDirectory(source: ByteSource): Promise<ZipEntry[]> {
-  const size = await source.size();
+export async function readCentralDirectory(file: CsFile): Promise<ZipEntry[]> {
+  const size = file.size;
 
   let tail: Uint8Array | undefined;
   let dv: DataView | undefined;
@@ -83,7 +83,7 @@ export async function readCentralDirectory(source: ByteSource): Promise<ZipEntry
     const probe = Math.min(size, want);
     if (probe <= lastProbe) break; // the file is smaller than the next probe
     lastProbe = probe;
-    tail = await source.read(size - probe, probe);
+    tail = await file.slice(size - probe, size).bytes();
     dv = new DataView(tail.buffer, tail.byteOffset, tail.byteLength);
     for (let at = tail.length - EOCD_SIZE; at >= 0; at--) {
       if (dv.getUint32(at, true) === EOCD_SIGNATURE) {
@@ -106,7 +106,7 @@ export async function readCentralDirectory(source: ByteSource): Promise<ZipEntry
     throw new Error("Zip64 archive; not implemented (no ePER shard needs it)");
   }
 
-  const cd = await source.read(cdOffset, cdSize);
+  const cd = await file.slice(cdOffset, cdOffset + cdSize).bytes();
   const cdv = new DataView(cd.buffer, cd.byteOffset, cd.byteLength);
   const utf8 = new TextDecoder();
 
@@ -140,14 +140,16 @@ export async function readCentralDirectory(source: ByteSource): Promise<ZipEntry
  * bytes, which fails to decode rather than rendering something plausible —
  * but only for a reader that checks, so this reads.
  */
-export async function resolvePayload(source: ByteSource, entry: ZipEntry): Promise<ZipPayload> {
+export async function resolvePayload(file: CsFile, entry: ZipEntry): Promise<ZipPayload> {
   if (entry.method !== STORED && entry.method !== DEFLATED) {
     throw new Error(
       `entry ${entry.name} uses compression method ${entry.method}; ` +
         `only stored (0) and deflated (8) occur in ePER's shards`,
     );
   }
-  const header = await source.read(entry.localHeaderOffset, LOCAL_HEADER_SIZE);
+  const header = await file
+    .slice(entry.localHeaderOffset, entry.localHeaderOffset + LOCAL_HEADER_SIZE)
+    .bytes();
   const hv = new DataView(header.buffer, header.byteOffset, header.byteLength);
   if (hv.getUint32(0, true) !== LOCAL_SIGNATURE) {
     throw new Error(`entry ${entry.name} has no local header at ${entry.localHeaderOffset}`);

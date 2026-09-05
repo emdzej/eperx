@@ -36,6 +36,15 @@ importers:
       "@commander-js/extra-typings":
         specifier: ^15.0.0
         version: 15.0.0(commander@15.0.0)
+      "@emdzej/csfs-core":
+        specifier: ^0.1.0
+        version: 0.1.0
+      "@emdzej/csfs-manifest":
+        specifier: ^0.1.0
+        version: 0.1.0
+      "@emdzej/csfs-node":
+        specifier: ^0.1.0
+        version: 0.1.0
       "@eperx/catalogue":
         specifier: workspace:*
         version: link:../../packages/catalogue
@@ -67,6 +76,18 @@ importers:
 
   apps/web:
     dependencies:
+      "@emdzej/csfs-core":
+        specifier: ^0.1.0
+        version: 0.1.0
+      "@emdzej/csfs-fsa":
+        specifier: ^0.1.0
+        version: 0.1.0
+      "@emdzej/csfs-http":
+        specifier: ^0.1.0
+        version: 0.1.0
+      "@emdzej/csfs-opfs":
+        specifier: ^0.1.0
+        version: 0.1.0
       "@eperx/catalogue":
         specifier: workspace:*
         version: link:../../packages/catalogue
@@ -130,6 +151,9 @@ importers:
 
   packages/importer:
     dependencies:
+      "@emdzej/csfs-core":
+        specifier: ^0.1.0
+        version: 0.1.0
       "@eperx/core":
         specifier: workspace:*
         version: link:../core
@@ -142,6 +166,9 @@ importers:
 
   packages/ktd:
     dependencies:
+      "@emdzej/csfs-core":
+        specifier: ^0.1.0
+        version: 0.1.0
       "@eperx/core":
         specifier: workspace:*
         version: link:../core
@@ -155,6 +182,9 @@ importers:
 
   packages/res:
     dependencies:
+      "@emdzej/csfs-core":
+        specifier: ^0.1.0
+        version: 0.1.0
       "@eperx/core":
         specifier: workspace:*
         version: link:../core
@@ -174,6 +204,42 @@ packages:
       }
     peerDependencies:
       commander: ~15.0.0
+
+  "@emdzej/csfs-core@0.1.0":
+    resolution:
+      {
+        integrity: sha512-WJQx2ZFcSfZZBtIX0OOvDHOz89Dk81u5S/jB8vtGAxjKMmbwm4z4NhPoh/bTYan9pV4Ooh7gh63DFAyZzCn7jQ==,
+      }
+
+  "@emdzej/csfs-fsa@0.1.0":
+    resolution:
+      {
+        integrity: sha512-tK6YaxTvD9hMwyCNuismHC3E+XaRmLTJTDwZ48ooxmLwxl7AV12yxFYqNs54kBW1HoDBf/z+Lf6FS5Z8+kCeJA==,
+      }
+
+  "@emdzej/csfs-http@0.1.0":
+    resolution:
+      {
+        integrity: sha512-Kunca38qW3/SamWqehwMSU1x6u9jcQhyGaRtxKrikCEGsw38UWPg6/lmw80rXeLzOg96BaWsbxh2JuNeCSl+PA==,
+      }
+
+  "@emdzej/csfs-manifest@0.1.0":
+    resolution:
+      {
+        integrity: sha512-5Hqu5GoBgCheFyCFgAtSaFfzv3iOHjWZnD2u6ZXf19zl544RifmqztOaQaTK8dHrLvobWE4WbyROzzVEhIzYsQ==,
+      }
+
+  "@emdzej/csfs-node@0.1.0":
+    resolution:
+      {
+        integrity: sha512-dH5RCWC/+fS8xgXMPt9rO2EXf4wRgGA74JH5nlSSDJMXFkUoi/lNrq6v8sQtflHaJyCfql2kGIn7dSsLsn+CwQ==,
+      }
+
+  "@emdzej/csfs-opfs@0.1.0":
+    resolution:
+      {
+        integrity: sha512-P1A6q+v3eI3UVn7mp3n1wTVCyHqtAhIkt/Yzbu5r4Isg/dJbHPRaxhQyS8836pByCz4vwuUE1s3ppHaP44ewKA==,
+      }
 
   "@esbuild/aix-ppc64@0.21.5":
     resolution:
@@ -2460,6 +2526,30 @@ snapshots:
   "@commander-js/extra-typings@15.0.0(commander@15.0.0)":
     dependencies:
       commander: 15.0.0
+
+  "@emdzej/csfs-core@0.1.0": {}
+
+  "@emdzej/csfs-fsa@0.1.0":
+    dependencies:
+      "@emdzej/csfs-core": 0.1.0
+
+  "@emdzej/csfs-http@0.1.0":
+    dependencies:
+      "@emdzej/csfs-core": 0.1.0
+      "@emdzej/csfs-manifest": 0.1.0
+
+  "@emdzej/csfs-manifest@0.1.0":
+    dependencies:
+      "@emdzej/csfs-core": 0.1.0
+
+  "@emdzej/csfs-node@0.1.0":
+    dependencies:
+      "@emdzej/csfs-core": 0.1.0
+
+  "@emdzej/csfs-opfs@0.1.0":
+    dependencies:
+      "@emdzej/csfs-core": 0.1.0
+      "@emdzej/csfs-fsa": 0.1.0
 
   "@esbuild/aix-ppc64@0.21.5":
     optional: true

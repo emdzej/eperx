@@ -55,7 +55,7 @@
       if (!(await hasManifest(base))) {
         throw new Error("the saved source no longer holds a catalogue");
       }
-      await connect(base, { kind: resumable.settings.kind });
+      await connect(base, { kind: resumable.settings.kind, handle: resumable.handle });
       if (tree.catalogue) {
         await loadMakes();
         // Back to where they were, if this tree still has it.

@@ -1,5 +1,5 @@
 import { chassisFromVin, F3Table, typeCodeFromVin, type F3Row } from "@eperx/ktd";
-import type { SourceFs } from "@eperx/importer";
+import type { CsFileSystem } from "@emdzej/csfs-core";
 import type { Database } from "./sqlite.js";
 import type { Disc } from "@eperx/importer";
 
@@ -46,7 +46,7 @@ export function modelsForTypeCode(db: Database, typeCode: string): string[] {
 }
 
 export async function lookupVehicle(
-  fs: SourceFs,
+  fs: CsFileSystem,
   disc: Disc,
   db: Database,
   input: { vin?: string; model?: string; chassis?: string },
@@ -80,9 +80,9 @@ export async function lookupVehicle(
   const result: VehicleLookup = { models, chassis };
 
   if (disc.files.chassis) {
-    const file = await fs.open(disc.files.chassis);
-    try {
-      const table = await F3Table.open(file.source());
+    const file = await fs.file(disc.files.chassis);
+    if (file) {
+      const table = await F3Table.open(file);
       const width = table.header.primaryKey.at(-1)?.length ?? 8;
       for (const model of models) {
         const rows = await table.lookup(model + chassisFromVin(chassis, width));
@@ -109,17 +109,15 @@ export async function lookupVehicle(
           });
         }
       }
-    } finally {
-      file.close();
     }
   }
 
   // `SP.RT` keys on a 7-digit chassis where `SP.CH` uses 8, so the same
   // vehicle needs a differently padded key in each.
   if (disc.files.build) {
-    const file = await fs.open(disc.files.build);
-    try {
-      const table = await F3Table.open(file.source());
+    const file = await fs.file(disc.files.build);
+    if (file) {
+      const table = await F3Table.open(file);
       const width = table.header.keyLength - 3;
       for (const model of result.model ? [result.model] : models) {
         const rows = await table.lookup(model + chassisFromVin(chassis, width));
@@ -129,8 +127,6 @@ export async function lookupVehicle(
           break;
         }
       }
-    } finally {
-      file.close();
     }
   }
 

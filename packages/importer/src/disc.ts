@@ -1,4 +1,4 @@
-import type { SourceFs } from "./fs.js";
+import type { CsFileSystem } from "@emdzej/csfs-core";
 
 /**
  * What an ePER disc looks like, and how to find the pieces on it.
@@ -20,8 +20,9 @@ export interface Disc {
 }
 
 /**
- * Paths are relative to the source root, because a browser has no absolute
- * path to offer — see the note in `fs.ts`.
+ * Paths are csfs paths: relative to the filesystem's root, `/`-separated. A
+ * browser has no absolute path to offer — a folder the user picked is a
+ * handle, not a location — so nothing here ever sees one.
  */
 export interface DiscFiles {
   /** Spare-parts catalogue, a Jet 4 database. */
@@ -53,8 +54,8 @@ function at(...parts: string[]): string {
  * Accepts either the mount root or its `data` directory, because both are
  * things a person plausibly picks in a folder dialog.
  */
-export async function openDisc(fs: SourceFs, root = ""): Promise<Disc> {
-  const hasIni = async (dir: string) => Boolean(await fs.statFile(at(dir, "runparam.ini")));
+export async function openDisc(fs: CsFileSystem, root = ""): Promise<Disc> {
+  const hasIni = async (dir: string) => Boolean(await fs.file(at(dir, "runparam.ini")));
   const dataDir = (await hasIni(root)) ? root : at(root, "data");
 
   if (!(await hasIni(dataDir))) {
@@ -63,12 +64,12 @@ export async function openDisc(fs: SourceFs, root = ""): Promise<Disc> {
     );
   }
 
-  const ini = parseIni(await fs.readText(at(dataDir, "runparam.ini")));
+  const ini = parseIni(await readLatin1(fs, at(dataDir, "runparam.ini")));
   const version = ini["sw_version"] ?? "unknown";
 
   const releases = new Set<string>();
   const files: DiscFiles = {};
-  for (const name of await fs.list(dataDir)) {
+  for (const name of await listNames(fs, dataDir)) {
     const m = NAME.exec(name);
     if (!m) continue;
     const [, family, kind, release] = m as unknown as [string, string, string, string];
@@ -76,7 +77,7 @@ export async function openDisc(fs: SourceFs, root = ""): Promise<Disc> {
     const path = at(dataDir, name);
     // The directory-valued entries (SP.IM, SP.MP, …) hold only `hold.me`
     // placeholders on a DVD, so only the regular files are of interest.
-    if (!(await fs.statFile(path))) continue;
+    if (!(await fs.file(path))) continue;
     if (family === "SP" && kind === "DB") files.spareParts = path;
     if (family === "AM" && kind === "DB") files.accessories = path;
     if (family === "SP" && kind === "CH") files.chassis = path;
@@ -85,13 +86,9 @@ export async function openDisc(fs: SourceFs, root = ""): Promise<Disc> {
     if (family === "SP" && kind === "PL") files.priceList = path;
   }
 
-  // A directory, so `statFile` is the wrong probe: list it and see.
+  // `file()` is the wrong probe for a directory, so ask for one.
   const images = at(dataDir, "images");
-  try {
-    if ((await fs.list(images)).length) files.imagesDir = images;
-  } catch {
-    // No images directory. A catalogue-only disc still imports.
-  }
+  if (await fs.directory(images)) files.imagesDir = images;
 
   if (releases.size !== 1) {
     throw new Error(
@@ -104,8 +101,27 @@ export async function openDisc(fs: SourceFs, root = ""): Promise<Disc> {
 }
 
 /** Every `*.res` shard in `data/images`, in name order. */
-export async function listShards(fs: SourceFs, imagesDir: string): Promise<string[]> {
-  return (await fs.list(imagesDir)).filter((n) => n.toLowerCase().endsWith(".res")).sort();
+export async function listShards(fs: CsFileSystem, imagesDir: string): Promise<string[]> {
+  return (await listNames(fs, imagesDir)).filter((n) => n.toLowerCase().endsWith(".res")).sort();
+}
+
+/** File names directly under a directory, or none if it is not there. */
+async function listNames(fs: CsFileSystem, dir: string): Promise<string[]> {
+  const handle = await fs.directory(dir);
+  if (!handle) return [];
+  return (await handle.entries()).filter((e) => e.kind === "file").map((e) => e.name);
+}
+
+/**
+ * Read a file as Latin-1.
+ *
+ * Not `CsFile.text()`, which decodes UTF-8: `runparam.ini` is a Windows-era
+ * INI and a stray high byte in it must not become U+FFFD.
+ */
+async function readLatin1(fs: CsFileSystem, path: string): Promise<string> {
+  const bytes = await fs.read(path);
+  if (!bytes) throw new Error(`${path} is not readable`);
+  return new TextDecoder("latin1").decode(bytes);
 }
 
 function parseIni(text: string): Record<string, string> {

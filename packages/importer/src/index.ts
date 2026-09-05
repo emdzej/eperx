@@ -2,10 +2,12 @@
  * Turning an ePER disc into a tree a browser can read.
  *
  * The same code runs in the CLI and in a browser tab. What differs is only
- * how bytes move — see `fs.ts` for the filesystem the importer talks to and
- * `sql.ts` for the slice of SQLite it writes through.
+ * how bytes move, and that is csfs's problem rather than ours: the importer
+ * takes a `CsFileSystem` to read and a `WritableFileSystem` to write, and
+ * `@emdzej/csfs-node`, `-fsa`, `-opfs` and `-http` supply them. `sql.ts` holds
+ * the one thing csfs has no opinion about — the slice of SQLite this writes
+ * through.
  */
-export type { SourceFile, SourceFs, TargetFs } from "./fs.js";
 export type { JetBuffer } from "./jet.js";
 export type { OpenSqlWriter, SqlInput, SqlStatement, SqlWriter } from "./sql.js";
 export { listShards, openDisc, type Disc, type DiscFiles } from "./disc.js";

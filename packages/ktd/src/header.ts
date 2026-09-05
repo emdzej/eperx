@@ -1,4 +1,4 @@
-import type { ByteSource } from "@eperx/core";
+import type { CsFile } from "@emdzej/csfs-core";
 
 /**
  * The F3 ("KTD") header, as `SP.CH`, `SP.RT`, `SP.TR` and `SP.RTCHRY` write it.
@@ -80,8 +80,8 @@ export interface F3Header {
   variableLength: boolean;
 }
 
-export async function readHeader(source: ByteSource): Promise<F3Header> {
-  const buf = await source.read(0, HEADER_PROBE);
+export async function readHeader(file: CsFile): Promise<F3Header> {
+  const buf = await file.slice(0, HEADER_PROBE).bytes();
   const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
   const ascii = new TextDecoder("ascii");
 
@@ -171,17 +171,14 @@ export async function readHeader(source: ByteSource): Promise<F3Header> {
  * count × bytes[width]
  * ```
  */
-export async function readReferenceTables(
-  source: ByteSource,
-  header: F3Header,
-): Promise<Uint8Array[][]> {
+export async function readReferenceTables(file: CsFile, header: F3Header): Promise<Uint8Array[][]> {
   const tables: Uint8Array[][] = [];
   for (const position of header.referenceTables) {
-    const head = await source.read(position, 8);
+    const head = await file.slice(position, position + 8).bytes();
     const dv = new DataView(head.buffer, head.byteOffset, head.byteLength);
     const count = dv.getUint32(0, true);
     const width = dv.getUint32(4, true);
-    const body = await source.read(position + 8, count * width);
+    const body = await file.slice(position + 8, position + 8 + count * width).bytes();
     const entries: Uint8Array[] = [];
     for (let i = 0; i < count; i++) entries.push(body.subarray(i * width, (i + 1) * width));
     tables.push(entries);

@@ -22,7 +22,7 @@ until you supply some. Two of the three options need nothing but a folder:
 
 | Source                       | What it does                                                                                                                                                                                    |
 | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Over HTTP**                | Any static host that honours `Range` — `eperx serve`, or a URL. Nothing is stored in the browser.                                                                                               |
+| **Over HTTP**                | Any static host that honours `Range` — `eperx serve`, or a URL. Nothing is stored in the browser. Needs the tree's `csfs-manifest.json`, since HTTP cannot list a directory.                    |
 | **A folder on this machine** | Read in place, **nothing copied**. A service worker answers the reads, so 5.7 GB of drawings and chassis files stay put. Chromium only, and the tree must hold real files rather than symlinks. |
 | **Stored in this browser**   | Copied into the origin private file system: opens on reload with no permission prompt and no disc mounted. Checked against the quota.                                                           |
 | **Import a disc**            | Build the tree in the browser from a mounted disc — no CLI at all. Chromium only, and it wants a desktop. See [Importing in the browser](#importing-in-the-browser).                            |
@@ -79,9 +79,20 @@ real SQL against it a 4 kB page at a time.
 blocked store with a sparse index, so its index is binary-searched over ranged
 reads rather than downloaded.
 
-Three sources of bytes, one transport: everything reads HTTP `Range`, and a
-service worker makes local files answer that too. Full reasoning in
-[`docs/plan.md`](docs/plan.md).
+Three sources of bytes, one interface: reading them is
+[**csfs**](https://github.com/emdzej/csfs)'s job — a static host, a folder the
+user picked, or the origin private file system, all behind one `CsFile` that
+slices. eperx grew its own version of that first and it is now a library, so
+the readers here (`@eperx/res`, `@eperx/ktd`) take a `CsFile` and never learn
+where it came from.
+
+A service worker is still in the picture, for one file. `sqlite-wasm-http`
+wants a URL and SQLite's VFS reads are **synchronous**, which no folder handle
+can answer — so `catalogue.sqlite` goes through the shim while everything else
+is read directly. In a picked folder the drawings no longer take that detour at
+all.
+
+Full reasoning in [`docs/plan.md`](docs/plan.md).
 
 ## Importing in the browser
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ByteSource } from "@eperx/core";
+import { RangeFile, type CsFile } from "@emdzej/csfs-core";
 import { DEFLATED, readCentralDirectory, resolvePayload, STORED } from "./zip.js";
 
 /**
@@ -86,19 +86,28 @@ function concat(parts: Uint8Array[]): Uint8Array {
   return out;
 }
 
-/** Counts reads, so "it did not download the archive" can be asserted. */
-function memorySource(bytes: Uint8Array): ByteSource & { bytesRead: number } {
-  return {
-    bytesRead: 0,
-    async size() {
-      return bytes.length;
-    },
-    async read(pos: number, len: number) {
-      const slice = bytes.subarray(pos, pos + len);
-      this.bytesRead += slice.length;
-      return slice;
-    },
-  };
+/**
+ * A {@link CsFile} over bytes in memory that counts what is read through it.
+ *
+ * `RangeFile` is csfs's helper for a store that can answer "bytes m to n" and
+ * has no `Blob` — which is exactly what a counting fake wants, because slicing
+ * it is pure arithmetic and nothing reaches the reader until bytes are
+ * actually asked for. That is what makes "it did not download the archive"
+ * assertable.
+ *
+ * The counters hang off the returned file rather than being returned beside
+ * it, so every call site can keep passing it straight in. They live in a
+ * closure, so a slice of this file counts against the same totals.
+ */
+function memorySource(bytes: Uint8Array): CsFile & { bytesRead: number } {
+  let bytesRead = 0;
+  const file = new RangeFile("/archive.res", bytes.length, async (start, end) => {
+    const slice = bytes.subarray(start, end);
+    bytesRead += slice.length;
+    return slice;
+  }) as unknown as CsFile & { bytesRead: number };
+  Object.defineProperty(file, "bytesRead", { get: () => bytesRead });
+  return file;
 }
 
 const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3, 4, 5]);
@@ -142,7 +151,7 @@ describe("resolvePayload", () => {
     const payload = await resolvePayload(source, entry!);
 
     expect(payload.offset).toBe(30 + "AA/AA01.png".length + 8);
-    const bytes = await source.read(payload.offset, payload.length);
+    const bytes = await source.slice(payload.offset, payload.offset + payload.length).bytes();
     expect([...bytes]).toEqual([...png]);
   });
 
@@ -154,7 +163,7 @@ describe("resolvePayload", () => {
     const source = memorySource(zip);
     const entries = await readCentralDirectory(source);
     const payload = await resolvePayload(source, entries[1]!);
-    await source.read(payload.offset, payload.length);
+    await source.slice(payload.offset, payload.offset + payload.length).bytes();
 
     expect(source.bytesRead).toBeLessThan(zip.length / 4);
   });

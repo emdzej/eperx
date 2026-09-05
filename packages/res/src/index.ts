@@ -1,4 +1,4 @@
-import type { ByteSource } from "@eperx/core";
+import type { CsFile } from "@emdzej/csfs-core";
 import { readCentralDirectory, resolvePayload, type ZipPayload } from "./zip.js";
 
 export { DEFLATED, readCentralDirectory, resolvePayload, STORED } from "./zip.js";
@@ -25,9 +25,9 @@ export function thumbnailName(entry: string): string {
  * runs at import time and the result is stored. A browser then needs a single
  * `Range` request per image and no central-directory fetch at all.
  */
-export async function indexShard(source: ByteSource): Promise<ZipPayload[]> {
-  const entries = await readCentralDirectory(source);
+export async function indexShard(file: CsFile): Promise<ZipPayload[]> {
+  const entries = await readCentralDirectory(file);
   const out: ZipPayload[] = [];
-  for (const entry of entries) out.push(await resolvePayload(source, entry));
+  for (const entry of entries) out.push(await resolvePayload(file, entry));
   return out;
 }

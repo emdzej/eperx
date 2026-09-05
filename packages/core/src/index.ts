@@ -1,22 +1,16 @@
 /**
  * Shared vocabulary for the ePER formats.
  *
- * Everything that reads bytes goes through {@link ByteSource}, so the same
- * reader works over a local file, a mounted disc, or an HTTP server that
- * honours `Range`. Nothing in this package knows about any of those.
+ * Reading bytes is not here. It used to be — a `ByteSource` with
+ * `size()`/`read(pos, len)` — and that has been replaced by `CsFile` from
+ * `@emdzej/csfs-core`, which is the same idea with a `Blob`'s spelling:
+ * `size` is a property and `read(pos, len)` is `slice(pos, pos + len).bytes()`.
+ * Keeping our own meant every backend needed an adapter, and a `File` from a
+ * picked directory already satisfies csfs's shape without one.
+ *
+ * What remains here is what is genuinely about ePER: the catalogue hierarchy's
+ * vocabulary and how an image path is spelled.
  */
-
-/** A random-access run of bytes. The one primitive every reader needs. */
-export interface ByteSource {
-  /** Total length in bytes. */
-  size(): Promise<number>;
-  /**
-   * Read `len` bytes at `pos`. Returning fewer bytes than asked for means
-   * end-of-source; readers treat a short read as an error rather than
-   * padding, so a truncated file cannot be mistaken for valid data.
-   */
-  read(pos: number, len: number): Promise<Uint8Array>;
-}
 
 /** The five brands ePER ships, keyed by `MAKES.MK_COD`. */
 export type MakeCode = "F" | "L" | "R" | "T" | "C" | "E";

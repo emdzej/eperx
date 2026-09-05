@@ -1,4 +1,4 @@
-import type { ByteSource } from "@eperx/core";
+import type { CsFile } from "@emdzej/csfs-core";
 import { decompress as bunzip } from "./bzip2.js";
 import { F3Type, readHeader, readReferenceTables, type F3Field, type F3Header } from "./header.js";
 
@@ -42,22 +42,24 @@ export class F3Table {
   private decompress: (input: Uint8Array) => Uint8Array = bunzip;
 
   private constructor(
-    private readonly source: ByteSource,
+    private readonly file: CsFile,
     readonly header: F3Header,
   ) {}
 
-  static async open(source: ByteSource, options: F3Options = {}): Promise<F3Table> {
-    const header = await readHeader(source);
-    const table = new F3Table(source, header);
+  static async open(file: CsFile, options: F3Options = {}): Promise<F3Table> {
+    const header = await readHeader(file);
+    const table = new F3Table(file, header);
     if (options.decompress) table.decompress = options.decompress;
-    table.references = await readReferenceTables(source, header);
+    table.references = await readReferenceTables(file, header);
     return table;
   }
 
   /** Number of blocks, read from the front of the index. */
   async blocks(): Promise<number> {
     if (this.indexCount === undefined) {
-      const head = await this.source.read(this.header.primaryIndex, 4);
+      const head = await this.file
+        .slice(this.header.primaryIndex, this.header.primaryIndex + 4)
+        .bytes();
       this.indexCount = new DataView(head.buffer, head.byteOffset, 4).getUint32(0, true);
     }
     return this.indexCount;
@@ -69,7 +71,7 @@ export class F3Table {
 
   private async entry(n: number): Promise<IndexEntry> {
     const at = this.header.primaryIndex + 4 + n * this.entrySize;
-    const buf = await this.source.read(at, this.entrySize);
+    const buf = await this.file.slice(at, at + this.entrySize).bytes();
     const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
     return {
       key: ascii.decode(buf.subarray(0, this.header.keyLength)),
@@ -111,7 +113,7 @@ export class F3Table {
    * 820 kB.
    */
   private async readBlock(entry: IndexEntry): Promise<F3Row[]> {
-    const compressed = await this.source.read(entry.start, entry.end - entry.start);
+    const compressed = await this.file.slice(entry.start, entry.end).bytes();
     if (compressed.length !== entry.end - entry.start) {
       throw new Error(`short read of block at ${entry.start}`);
     }
