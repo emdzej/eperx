@@ -290,10 +290,16 @@ There are two routes, and only one of them needs this format.
 **By VIN type code, available from the Access data alone.** `SP.DB`'s `VIN`
 table maps a three-character code to a model — 132 rows, 73 distinct codes —
 and a Fiat-group VIN carries that code at positions 4–6, so `ZFA312…` gives
-`312`. It is a _router_, not a decoder: `312` reaches three models and six
-catalogues (Nuova Panda, Nuova 500 and its Abarth, 500 MY2012 and its Abarth,
-New Ypsilon), and across all codes it narrows to 3.4 catalogues on average and
-as many as 15.
+`312`. It is a _router_, not a decoder: `312` reaches **four** models (`150`,
+`319`, `402`, `519`) and six catalogues (Nuova Panda, Nuova 500 and its
+Abarth, 500 MY2012 and its Abarth, New Ypsilon). Averaged over the 73 distinct
+codes it narrows to **3.3 catalogues** and 1.8 models, reaching as many as 15
+catalogues (code `178`) and 7 models.
+
+That fan-out is the cost of this route: a lookup probes `SP.CH` once per
+candidate model, because nothing in the Access data says which of them a given
+chassis belongs to. `SP.CH`'s own secondary index is on `VIN`, which would
+answer it in one seek — see [§8](#8-what-is-not-decoded).
 
 **By chassis number.** `SP.CH` is looked up with
 `MODEL || chassis.padStart(8, "0")` and yields that chassis's `MVS` — the exact
@@ -522,19 +528,20 @@ credible. A rise in that number is a regression.
 
 ## 6. Established by
 
-| Claim                       | How                                                                                           |
-| --------------------------- | --------------------------------------------------------------------------------------------- |
-| Jet 4, no password          | page 0 magic and version byte; both files open in `mdb-reader` and `mdbtools`                 |
-| Row and table counts        | counted, not estimated, on edition 83                                                         |
-| Column types in use         | enumerated over all 77 tables of both databases                                               |
-| Drawing shards are stored   | `compress_type` tallied over all 261 shards, 228,226 entries                                  |
-| `IMG_PATH` layout           | `DRAWINGS` rows resolved to entries and extracted; PNGs decode at 2150×1675                   |
-| Drawing↔parts key           | the `DRW_NUM` join returned zero rows; `TABLE_COD, VARIANTE` returns the callouts             |
-| PATTERN grammar             | all 107,957 distinct patterns parsed; 39 fail, and `DRAWINGS` and `MVS` fail 0                |
-| PATTERN tokens              | all 4,241,952 occurrences split against each catalogue's real `(type, code)` pairs            |
-| Tokenisation is unambiguous | 0 of those 4,241,952 split two ways; the type collisions come from a self-join of `CARAT_DSC` |
-| Reachability                | every drawing pattern evaluated against every `MVS` of its catalogue — `eperx applicability`  |
-| F3 magic and tables         | header hexdump of four files                                                                  |
+| Claim                       | How                                                                                                |
+| --------------------------- | -------------------------------------------------------------------------------------------------- |
+| Jet 4, no password          | page 0 magic and version byte; both files open in `mdb-reader` and `mdbtools`                      |
+| Row and table counts        | counted, not estimated, on edition 83                                                              |
+| Column types in use         | enumerated over all 77 tables of both databases                                                    |
+| Drawing shards are stored   | `compress_type` tallied over all 261 shards, 228,226 entries                                       |
+| `IMG_PATH` layout           | `DRAWINGS` rows resolved to entries and extracted; PNGs decode at 2150×1675                        |
+| Drawing↔parts key           | the `DRW_NUM` join returned zero rows; `TABLE_COD, VARIANTE` returns the callouts                  |
+| PATTERN grammar             | all 107,957 distinct patterns parsed; 39 fail, and `DRAWINGS` and `MVS` fail 0                     |
+| PATTERN tokens              | all 4,241,952 occurrences split against each catalogue's real `(type, code)` pairs                 |
+| Tokenisation is unambiguous | 0 of those 4,241,952 split two ways; the type collisions come from a self-join of `CARAT_DSC`      |
+| Reachability                | every drawing pattern evaluated against every `MVS` of its catalogue — `eperx applicability`       |
+| F3 magic and tables         | header hexdump of four files                                                                       |
+| F3 block index and rows     | implemented and read against real files — `eperx f3`, `eperx vin`; 16 unit tests on synthetic ones |
 
 ## 7. Prior work
 
@@ -557,10 +564,15 @@ Honest list, so nobody reports these as discoveries.
 
 - **`SP.PL` — price lists.** Format unexamined. Out of scope by decision
   (see [`plan.md`](plan.md)), so it is described, not built.
-- **`SP.CH` / `SP.TR` / `SP.RT` bodies.** The F3 header parses by eye and the
-  field lists are read; the block index and row layout are not implemented, so
-  there is no chassis lookup. What each file holds is now known — see
-  [§4](#4-spch-sptr-sprt--the-f3-format).
+- **`SP.CH`'s secondary index, which is on `VIN`.** The header names it and
+  nothing reads it. A VIN currently reaches a car the long way round — the
+  `VIN` table gives candidate models and each is probed against the primary
+  `MODEL+CHASSY` index, up to seven probes for one lookup. Reading the `VIN`
+  index would make it a single seek and remove the guessing. `SP.RT` carries
+  one too.
+- **`SP.TR` is read but unused.** Its 120,134,472 rows key
+  `MODELLO+TELAIO+MATRICOLA` to a `PART` — per-vehicle fitment — and how that
+  relates to `TBDATA` is not worked out.
 - **`?` in patterns**, and the precedence of `!` against an implicit AND —
   both in [§5](#what-is-still-open), which also records how several matching
   alternatives on one callout are probably resolved (`TBD_SEQ` order) and why
