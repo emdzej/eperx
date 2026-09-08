@@ -177,10 +177,31 @@
       aria-haspopup="dialog"
       aria-label="Settings"
     >
-      <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true">
+      <!--
+        Lucide's `settings` geometry, inlined. ISC licensed — © Lucide Icons
+        and Contributors — and copied rather than depended on because eperx
+        draws exactly two icons: the package cost 4.9 kB gzipped on a 55 kB
+        app, which is poor value for one glyph. Add the dependency if a third
+        icon ever appears.
+
+        What was here before was hand-drawn, filled, and had stubby
+        trapezoidal teeth; at 14px it read as a flower rather than a gear.
+      -->
+      <svg
+        viewBox="0 0 24 24"
+        width="15"
+        height="15"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.75"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
         <path
-          d="M9.4 1H6.6l-.3 1.9a5 5 0 0 0-1.2.7l-1.8-.7-1.4 2.4 1.5 1.2a5 5 0 0 0 0 1.4L1.9 9.1l1.4 2.4 1.8-.7c.37.3.78.53 1.2.7L6.6 15h2.8l.3-1.9a5 5 0 0 0 1.2-.7l1.8.7 1.4-2.4-1.5-1.2a5 5 0 0 0 0-1.4l1.5-1.2-1.4-2.4-1.8.7a5 5 0 0 0-1.2-.7L9.4 1ZM8 10.2a2.2 2.2 0 1 1 0-4.4 2.2 2.2 0 0 1 0 4.4Z"
+          d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"
         />
+        <circle cx="12" cy="12" r="3" />
       </svg>
     </button>
 
