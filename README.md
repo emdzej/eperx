@@ -30,6 +30,9 @@ until you supply some. Two of the three options need nothing but a folder:
 The choice is remembered. HTTP and browser storage reopen silently; a saved
 folder may need one click, because browsers grant directory access per session.
 
+Step-by-step, including importing a disc without the CLI:
+[**the user guide**](docs/user-guide.md).
+
 The HTTP option works from the deployed site against `eperx serve` on your own
 machine — loopback is a trustworthy origin, so it is not mixed content, and
 `serve` sends the header Chrome's Private Network Access wants from a public
@@ -148,6 +151,10 @@ must not look like an answer. What is still open is listed in
 
 ## Documentation
 
+- [`docs/user-guide.md`](docs/user-guide.md) — **start here to use it.**
+  Getting a disc's data in by all three routes, choosing between the four data
+  sources, finding a part, narrowing to one vehicle, and what to do when
+  something goes wrong.
 - [`docs/data-format.md`](docs/data-format.md) — **the format reference.** All
   three storage formats on the disc, the catalogue hierarchy, the schema traps
   that return zero rows if you get them wrong, the `PATTERN` grammar, and an
