@@ -15,7 +15,11 @@
     "variant": "Variant {{number}}",
     "meta": "{{width}}×{{height}} · {{count}} callouts",
     "callouts_one": "{{count}} callout",
-    "callouts_other": "{{count}} callouts"
+    "callouts_other": "{{count}} callouts",
+    "variants_one": "{{count}} drawing",
+    "variants_other": "{{count}} drawings",
+    "variantsOf": "{{shown}} of {{total}}",
+    "fits": "Fits"
   },
   "footer": {
     "queries": "SQL statements run against the tree",
@@ -46,7 +50,9 @@
     "unknown": "not determined",
     "copyPart": "Copy the part number",
     "copyName": "Copy the description",
-    "usages": "Pick a part to see every drawing it appears on."
+    "usages": "Pick a part to see every drawing it appears on.",
+    "allFiltered": "Every callout is hidden: this vehicle can have none of them.",
+    "noCallouts": "No callouts on this drawing."
   },
   "rail": {
     "group": "Group",
@@ -57,6 +63,17 @@
     "chooseGroup": "Pick a group.",
     "noGroups": "No groups match.",
     "noSubgroups": "No subgroups."
+  },
+  "search": {
+    "title": "Search",
+    "results_one": "{{count}} part",
+    "results_other": "{{count}} parts",
+    "close": "Close the results",
+    "usages_one": "on {{count}} drawing",
+    "usages_other": "on {{count}} drawings",
+    "unit": "unit",
+    "minimum": "min",
+    "pickPart": "Pick a part to see every drawing it appears on."
   },
   "settings": {
     "title": "Settings",
@@ -78,7 +95,14 @@
     "filterTitle": "Hide drawings and parts this vehicle definitely cannot have",
     "fromVin": "From this car's build record",
     "fromVersion": "From the version",
-    "noVehicle": "No vehicle chosen — every drawing is shown"
+    "noVehicle": "No vehicle chosen — every drawing is shown",
+    "mvs": "MVS",
+    "chassis": "Chassis",
+    "engine": "Engine",
+    "built": "Built",
+    "interior": "Interior",
+    "sincom": "Sincom",
+    "doors": "Doors"
   },
   "theme": {
     "auto": "Theme: follows this device",

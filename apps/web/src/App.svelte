@@ -1,19 +1,25 @@
 <script lang="ts">
   import About from "./components/About.svelte";
   import DrawingView from "./components/DrawingView.svelte";
-  import GroupTree from "./components/GroupTree.svelte";
   import PartResults from "./components/PartResults.svelte";
-  import SelectorBar from "./components/SelectorBar.svelte";
+  import PartsPanel from "./components/PartsPanel.svelte";
+  import SearchList, { type ListItem } from "./components/SearchList.svelte";
   import SettingsDialog from "./components/SettingsDialog.svelte";
-  import ThemeToggle from "./components/ThemeToggle.svelte";
-  import Cog from "@lucide/svelte/icons/cog";
+  import SpecStrip from "./components/SpecStrip.svelte";
+  import Toolbar from "./components/Toolbar.svelte";
   import { i18n } from "./lib/i18n/index.svelte";
-  import { browse, loadMakes, restoreSelection, runSearch } from "./lib/browse.svelte";
+  import {
+    browse,
+    loadMakes,
+    restoreSelection,
+    runSearch,
+    selectGroup,
+    selectSubgroup,
+  } from "./lib/browse.svelte";
   import { hasManifest, mount } from "./lib/mount";
   import { readSettings } from "./lib/settings";
   import { connect, setLanguage, stats, tree } from "./lib/tree.svelte";
 
-  let query = $state("");
   let aboutOpen = $state(false);
   let settingsOpen = $state(false);
   /** Nothing chosen yet, so the settings panel opens as an unclosable prompt. */
@@ -24,9 +30,34 @@
 
   const t = $derived(i18n.t);
 
-  // Part results take over the main pane while there are any; clearing the
-  // box returns to the drawing, so there is no mode to get stuck in.
+  /*
+   * Search results appear over the parts column, not instead of the whole
+   * view. They used to replace it, which threw away the drawing and the rail
+   * you were working in; a part number is a question *about* what is on
+   * screen, so the answer belongs beside it.
+   */
   const showingParts = $derived(browse.parts.length > 0);
+
+  const groupItems = $derived(
+    browse.groups.map(
+      (group): ListItem => ({
+        key: String(group.code),
+        code: String(group.code),
+        name: group.name ?? "—",
+      }),
+    ),
+  );
+
+  const subgroupItems = $derived(
+    browse.subgroups.map(
+      (subgroup): ListItem => ({
+        key: String(subgroup.code),
+        code: String(subgroup.code),
+        name: subgroup.name ?? "—",
+        note: String(subgroup.drawings),
+      }),
+    ),
+  );
 
   /**
    * Reopen whatever was chosen last time, or ask.
@@ -73,7 +104,7 @@
     }
   }
 
-  async function search() {
+  async function search(query: string) {
     if (query.trim()) await runSearch(query);
     else browse.parts = [];
   }
@@ -98,94 +129,11 @@
     <div class="flex-1 bg-accent-alt"></div>
   </div>
 
-  <header class="flex shrink-0 items-center gap-2 border-b border-divider bg-surface px-4 py-2">
-    <!--
-      Wordmark, version, repository. The version is a build-time literal from
-      the root manifest rather than a runtime read, so what is shown cannot
-      disagree with the tag a release is cut from.
-    -->
-    <button
-      class="font-mono text-lg font-semibold tracking-tight"
-      onclick={() => (aboutOpen = true)}
-      title={t("toolbar.about")}
-      aria-haspopup="dialog"
-      aria-label={t("toolbar.about")}
-    >
-      <span class="text-foreground">eper</span><span class="text-accent">x</span>
-    </button>
-
-    <a
-      class="shrink-0 font-mono text-[10px] tabular-nums text-faint no-underline
-             transition-colors hover:text-foreground"
-      href={`${__REPO_URL__}/releases/tag/${__APP_VERSION__}`}
-      target="_blank"
-      rel="noopener noreferrer"
-      title={t("toolbar.release", { version: __APP_VERSION__ })}
-    >
-      {__APP_VERSION__}
-    </a>
-
-    <a
-      class="flex shrink-0 items-center text-faint transition-colors hover:text-foreground"
-      href={__REPO_URL__}
-      target="_blank"
-      rel="noopener noreferrer"
-      title={t("toolbar.repo")}
-      aria-label={t("toolbar.repo")}
-    >
-      <!-- GitHub's own mark, inlined so it takes currentColor and needs no fetch. -->
-      <svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor" aria-hidden="true">
-        <path
-          d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"
-        />
-      </svg>
-    </a>
-
-    <div class="flex-1"></div>
-
-    {#if tree.catalogue}
-      <input
-        class="w-56 rounded border border-divider bg-base px-2 py-1 font-mono text-xs
-               outline-none focus:border-accent"
-        bind:value={query}
-        placeholder={t("toolbar.searchPlaceholder")}
-        onkeydown={(e) => e.key === "Enter" && search()}
-      />
-      <button
-        class="rounded px-2 py-1 text-xs text-muted transition-colors hover:bg-elevated
-               hover:text-foreground"
-        onclick={search}
-      >
-        Search
-      </button>
-
-      {#if tree.languages.length > 1}
-        <select
-          class="rounded border border-divider bg-base px-1 py-1 text-xs text-muted
-                 outline-none focus:border-accent"
-          value={tree.catalogue.language}
-          onchange={(e) => changeLanguage(e.currentTarget.value)}
-        >
-          {#each tree.languages as language (language.code)}
-            <option value={language.code}>{language.name}</option>
-          {/each}
-        </select>
-      {/if}
-    {/if}
-
-    <button
-      class="rounded px-2 py-1 text-muted transition-colors hover:bg-elevated
-             hover:text-foreground"
-      onclick={() => (settingsOpen = true)}
-      title={t("toolbar.settings")}
-      aria-haspopup="dialog"
-      aria-label={t("toolbar.settings")}
-    >
-      <Cog size={15} />
-    </button>
-
-    <ThemeToggle />
-  </header>
+  <Toolbar
+    onAbout={() => (aboutOpen = true)}
+    onSettings={() => (settingsOpen = true)}
+    onSearch={(q) => void search(q)}
+  />
 
   {#if !tree.catalogue}
     <main class="flex min-h-0 flex-1 items-center justify-center">
@@ -203,84 +151,113 @@
           </button>
         </div>
       {:else if !settingsOpen}
-        <button
-          class="rounded border border-divider px-3 py-1 text-xs text-foreground
-                 transition-colors hover:bg-elevated"
-          onclick={() => (settingsOpen = true)}
-        >
-          {t("app.chooseSource")}
-        </button>
-      {/if}
-    </main>
-  {:else}
-    <main class="flex min-h-0 flex-1 flex-col">
-      <!-- Marque, model, catalogue and vehicle across the top; group and
-           subgroup down the left. The drawing gets everything else, which is
-           the point — it is what anyone came to look at. -->
-      <SelectorBar />
-
-      <!-- Part of the tree is unreadable — dismissible, and shown once rather
-           than on every drawing that fails, because the cause is the tree and
-           not the drawing. -->
-      {#if tree.warning && !warningDismissed}
-        <div
-          class="flex shrink-0 items-start gap-2 border-b border-warn/40 bg-warn/10 px-3 py-1.5
-                 text-[11px] leading-relaxed text-warn"
-        >
-          <span class="shrink-0" aria-hidden="true">!</span>
-          <p class="min-w-0 flex-1">{tree.warning}</p>
+        <div class="space-y-2 text-center">
+          <p class="text-xs text-faint">{t("app.tagline")}</p>
           <button
-            class="shrink-0 text-warn/70 transition-colors hover:text-warn"
-            onclick={() => (warningDismissed = true)}
-            aria-label={t("footer.dismiss")}
-            title={t("footer.dismiss")}
+            class="rounded border border-divider px-3 py-1 text-xs text-foreground
+                   transition-colors hover:bg-elevated"
+            onclick={() => (settingsOpen = true)}
           >
-            &times;
+            {t("app.chooseSource")}
           </button>
         </div>
       {/if}
-
-      {#if showingParts}
-        <div class="flex min-h-0 flex-1"><PartResults /></div>
-      {:else}
-        <div class="flex min-h-0 flex-1">
-          <GroupTree />
-          <DrawingView />
-        </div>
-      {/if}
-
-      <footer
-        class="flex shrink-0 items-center gap-4 border-t border-divider bg-surface px-4 py-1
-               font-mono text-[11px]"
-      >
-        {#if browse.error}
-          <span class="text-danger">{browse.error}</span>
-        {:else if browse.busy}
-          <span class="text-faint">reading…</span>
-        {:else if browse.drawing}
-          <span class="text-muted">
-            {browse.catalogue?.code}/{browse.drawing.group}/{browse.drawing.subgroup}
-            · {browse.drawing.table} v{browse.drawing.variant}
-          </span>
-        {/if}
-        <div class="flex-1"></div>
-        <span class="text-faint" title={t("toolbar.readingFrom")}>
-          {tree.kind}
-        </span>
-        <!-- Query count, not bytes: SQLite fetches its pages from inside a
-             worker, whose resource timings the main thread cannot see, so a
-             byte figure here would be a plausible-looking zero. The image is
-             read by our own code, so that one is real. -->
-        <span class="text-faint" title={t("footer.queries")}>
-          {stats.queries} queries
-        </span>
-        {#if browse.imageBytes}
-          <span class="text-accent" title={t("footer.drawingBytes")}>
-            img {kb(browse.imageBytes)}
-          </span>
-        {/if}
-      </footer>
     </main>
+  {:else}
+    <SpecStrip />
+
+    <!-- Part of the tree is unreadable — dismissible, and shown once rather
+         than on every drawing that fails, because the cause is the tree and
+         not the drawing. -->
+    {#if tree.warning && !warningDismissed}
+      <div
+        class="flex shrink-0 items-start gap-2 border-b border-warn/40 bg-warn/10 px-3 py-1.5
+               text-[11px] leading-relaxed text-warn"
+      >
+        <span class="shrink-0" aria-hidden="true">!</span>
+        <p class="min-w-0 flex-1">{tree.warning}</p>
+        <button
+          class="shrink-0 text-warn/70 transition-colors hover:text-warn"
+          onclick={() => (warningDismissed = true)}
+          aria-label={t("footer.dismiss")}
+          title={t("footer.dismiss")}
+        >
+          &times;
+        </button>
+      </div>
+    {/if}
+
+    <!--
+      Three columns: the tree on the left, the drawing in the middle, the parts
+      on the right. The drawing takes the larger share of what is left because
+      it is what anyone came to look at, and the parts table needs a floor wide
+      enough for its five columns.
+    -->
+    <main class="grid min-h-0 flex-1" style="grid-template-columns: 15rem minmax(0, 1.1fr) minmax(26rem, 1fr)">
+      <aside class="flex min-h-0 flex-col border-r border-divider bg-surface">
+        <SearchList
+          label={t("rail.group")}
+          items={groupItems}
+          selectedKey={browse.group === undefined ? undefined : String(browse.group.code)}
+          placeholder={t("rail.filterGroups")}
+          emptyHint={t("rail.chooseCatalogue")}
+          noMatch={t("rail.noGroups")}
+          onSelect={(item) => {
+            const group = browse.groups.find((g) => String(g.code) === item.key);
+            if (group) void selectGroup(group);
+          }}
+        />
+        <div class="border-t border-divider"></div>
+        <SearchList
+          label={t("rail.subgroup")}
+          items={subgroupItems}
+          selectedKey={browse.subgroup === undefined ? undefined : String(browse.subgroup.code)}
+          placeholder={t("rail.filterSubgroups")}
+          emptyHint={t("rail.chooseGroup")}
+          noMatch={t("rail.noSubgroups")}
+          onSelect={(item) => {
+            const subgroup = browse.subgroups.find((sg) => String(sg.code) === item.key);
+            if (subgroup) void selectSubgroup(subgroup);
+          }}
+        />
+      </aside>
+
+      <DrawingView />
+
+      <!-- The search answer sits over this column rather than over the page,
+           so the drawing and the rail stay where they were. -->
+      {#if showingParts}
+        <PartResults onClose={() => (browse.parts = [])} />
+      {:else}
+        <PartsPanel />
+      {/if}
+    </main>
+
+    <footer
+      class="flex shrink-0 items-center gap-4 border-t border-divider bg-surface px-3 py-1
+             font-mono text-[10px]"
+    >
+      {#if browse.error}
+        <span class="text-danger">{browse.error}</span>
+      {:else if browse.busy}
+        <span class="text-faint">…</span>
+      {:else if browse.drawing}
+        <span class="text-muted">
+          {browse.catalogue?.code}/{browse.drawing.group}/{browse.drawing.subgroup}
+          · {browse.drawing.table} v{browse.drawing.variant}
+        </span>
+      {/if}
+      <div class="flex-1"></div>
+      <span class="text-faint" title={t("toolbar.readingFrom")}>{tree.kind}</span>
+      <!-- Query count, not bytes: SQLite fetches its pages from inside a
+           worker, whose resource timings the main thread cannot see, so a byte
+           figure here would be a plausible-looking zero. The image is read by
+           our own code, so that one is real. -->
+      <span class="text-faint" title={t("footer.queries")}>{stats.queries} q</span>
+      {#if browse.imageBytes}
+        <span class="text-accent" title={t("footer.drawingBytes")}>{kb(browse.imageBytes)}</span>
+      {/if}
+    </footer>
   {/if}
 
   {#if aboutOpen}

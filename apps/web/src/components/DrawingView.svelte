@@ -1,88 +1,95 @@
+<!--
+  The drawing, and the variants of it.
+
+  Slimmer than it was: the callout list has moved out to its own column
+  (`PartsPanel`), because a callout list is read *against* the image and the
+  two belong side by side rather than stacked with the table clipped.
+
+  What stays is the diagram, the variant strip, and one footer line naming what
+  is on screen. A subgroup can hold several `DRAWINGS` rows for the same table
+  — each a different applicability — and choosing between them is part of
+  reading the drawing, so that strip sits with the image and not with the parts.
+-->
 <script lang="ts">
-  import {
-    browse,
-    calloutKey,
-    drawingKey,
-    explainPattern,
-    showDrawing,
-  } from "../lib/browse.svelte";
+  import { browse, drawingKey, explainPattern, showDrawing } from "../lib/browse.svelte";
+  import { i18n } from "../lib/i18n/index.svelte";
 
-  // A drawing or callout is hidden only when it *definitely* does not fit.
-  // "Unknown" is always shown: declining to answer must not look like an
-  // answer, and hiding on uncertainty would quietly lose real parts.
-  const hidden = (verdict: string | undefined) =>
-    browse.source !== undefined && browse.hideUnfit && verdict === "false";
+  const t = $derived(i18n.t);
 
-  const visibleDrawings = $derived(
-    browse.drawings.filter((d) => !hidden(browse.fit.get(drawingKey(d)))),
-  );
-  const visibleCallouts = $derived(
-    browse.callouts.filter((c) => !hidden(browse.calloutFit.get(calloutKey(c)))),
+  // A drawing is hidden only when it *definitely* does not fit. "Unknown" is
+  // always shown; see the note in `PartsPanel`.
+  const filtering = $derived(browse.source !== undefined && browse.hideUnfit);
+  const shown = $derived(
+    filtering
+      ? browse.drawings.filter((d) => browse.fit.get(drawingKey(d)) !== "false")
+      : browse.drawings,
   );
 
   const mark = (verdict: string | undefined) =>
     verdict === "true" ? "text-ok" : verdict === "false" ? "text-danger" : "text-warn";
-  const label = (verdict: string | undefined) =>
-    verdict === "true" ? "fits" : verdict === "false" ? "does not fit" : "not determined";
-  // A glyph as well as a colour. "does not fit" and "not determined" are
-  // amber and red, which are hard to tell apart at this size and impossible
-  // for a reader who cannot see the difference at all — and the distinction
-  // is the whole point of three-valued logic.
+  const verdictLabel = (verdict: string | undefined) =>
+    verdict === "true"
+      ? t("parts.fits")
+      : verdict === "false"
+        ? t("parts.unfit")
+        : t("parts.unknown");
   const glyph = (verdict: string | undefined) =>
     verdict === "true" ? "✓" : verdict === "false" ? "✗" : "?";
 </script>
 
-<div class="flex min-h-0 flex-1">
-  <!-- Variant strip: one entry per DRAWINGS row for this subgroup. Each is a
-       different applicability, which is why the pattern is shown beside it. -->
-  {#if visibleDrawings.length > 1}
-    <div class="flex w-56 shrink-0 flex-col border-r border-divider">
-      <div
-        class="shrink-0 border-b border-divider px-2 py-1 text-xs uppercase tracking-wide text-faint"
-      >
-        {visibleDrawings.length}{#if visibleDrawings.length !== browse.drawings.length}<span
-            class="normal-case text-faint"> of {browse.drawings.length}</span
-          >{/if} drawings
-      </div>
-      <div class="min-h-0 flex-1 overflow-y-auto">
-        {#each visibleDrawings as drawing (`${drawing.table}-${drawing.variant}-${drawing.revision}`)}
-          <button
-            class="w-full border-b border-rule px-2 py-1.5 text-left transition-colors
-                   hover:bg-elevated
-                   {browse.drawing === drawing ? 'bg-elevated' : ''}"
-            onclick={() => showDrawing(drawing)}
-          >
-            <div
-              class="truncate text-xs {browse.drawing === drawing
-                ? 'text-accent'
-                : 'text-muted'}"
+<div class="flex min-h-0 min-w-0 flex-1 flex-col">
+  <div class="flex min-h-0 flex-1">
+    {#if shown.length > 1}
+      <div class="flex w-48 shrink-0 flex-col border-r border-divider">
+        <header
+          class="flex shrink-0 items-baseline gap-1 border-b border-divider px-2 py-1
+                 text-[10px] uppercase tracking-wide text-faint"
+        >
+          <span>{t("drawing.variants", { count: browse.drawings.length })}</span>
+          {#if shown.length !== browse.drawings.length}
+            <span class="font-mono normal-case tabular-nums">
+              {t("drawing.variantsOf", { shown: shown.length, total: browse.drawings.length })}
+            </span>
+          {/if}
+        </header>
+        <div class="min-h-0 flex-1 overflow-y-auto">
+          {#each shown as drawing (drawingKey(drawing))}
+            {@const verdict = browse.fit.get(drawingKey(drawing))}
+            <button
+              class="w-full border-b border-rule px-2 py-1.5 text-left transition-colors
+                     hover:bg-elevated {browse.drawing === drawing ? 'bg-elevated' : ''}"
+              onclick={() => showDrawing(drawing)}
             >
-              {drawing.name ?? drawing.table}
-            </div>
-            <div class="truncate font-mono text-[10px] text-faint">
-              {drawing.table} · v{drawing.variant}
-            </div>
-            {#if drawing.pattern}
               <div
-                class="truncate font-mono text-[10px] {browse.source
-                  ? mark(browse.fit.get(drawingKey(drawing)))
-                  : 'text-warn'}"
-                title={browse.source
-                  ? `${label(browse.fit.get(drawingKey(drawing)))} — ${drawing.pattern}`
-                  : drawing.pattern}
+                class="truncate text-xs {browse.drawing === drawing
+                  ? 'text-accent'
+                  : 'text-muted'}"
               >
-                {#if browse.source}{glyph(browse.fit.get(drawingKey(drawing)))}
-                {/if}{drawing.pattern}
+                {drawing.name ?? drawing.table}
               </div>
-            {/if}
-          </button>
-        {/each}
+              <div class="truncate font-mono text-[10px] text-faint">
+                {drawing.table} · v{drawing.variant}
+              </div>
+              {#if drawing.pattern}
+                <div
+                  class="truncate font-mono text-[10px] {browse.source
+                    ? mark(verdict)
+                    : 'text-warn'}"
+                  title={browse.source
+                    ? `${verdictLabel(verdict)} — ${drawing.pattern}`
+                    : drawing.pattern}
+                >
+                  {#if browse.source}{glyph(verdict)}
+                  {/if}{drawing.pattern}
+                </div>
+              {/if}
+            </button>
+          {/each}
+        </div>
       </div>
-    </div>
-  {/if}
+    {/if}
 
-  <div class="flex min-w-0 flex-1 flex-col">
-    <div class="flex min-h-0 flex-1 items-center justify-center overflow-auto p-3">
+    <div class="flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-auto p-3">
       {#if browse.imageUrl}
         <img
           src={browse.imageUrl}
@@ -90,91 +97,39 @@
           class="max-h-full max-w-full object-contain"
         />
       {:else if browse.drawing}
-        <p class="text-xs text-faint">No image for this drawing.</p>
+        <p class="text-xs text-faint">{t("drawing.none")}</p>
       {:else}
-        <p class="text-xs text-faint">Pick a subgroup.</p>
+        <p class="text-xs text-faint">{t("drawing.pickSubgroup")}</p>
       {/if}
     </div>
-
-    {#if browse.drawing}
-      <div class="shrink-0 border-t border-divider">
-        {#if browse.drawing.pattern}
-          <!-- Verbatim, and marked as such. The grammar is characterised but
-               not verified, so eperx does not claim to have evaluated it. -->
-          <div class="flex items-baseline gap-2 border-b border-rule px-3 py-1">
-            <span class="text-xs uppercase tracking-wide text-faint">fits</span>
-            <span
-              class="font-mono text-xs {browse.source
-                ? mark(browse.fit.get(drawingKey(browse.drawing)))
-                : 'text-warn'}">{browse.drawing.pattern}</span
-            >
-            {#if browse.source}
-              <span class="text-[10px] {mark(browse.fit.get(drawingKey(browse.drawing)))}">
-                {glyph(browse.fit.get(drawingKey(browse.drawing)))}
-                {label(browse.fit.get(drawingKey(browse.drawing)))}
-              </span>
-            {/if}
-            <!-- The expression in words, so the reader can disagree with it
-                 rather than having to trust it. -->
-            <span class="min-w-0 flex-1 truncate text-[10px] text-faint">
-              {explainPattern(browse.drawing.pattern)}
-            </span>
-          </div>
-        {/if}
-        <div class="max-h-56 overflow-auto">
-          <table class="w-full min-w-[36rem] text-xs">
-            <thead class="sticky top-0 bg-surface text-faint">
-              <tr class="border-b border-divider">
-                <th class="w-14 px-3 py-1 text-left font-normal">Ref</th>
-                <th class="px-2 py-1 text-left font-normal">Part</th>
-                <th class="px-2 py-1 text-left font-normal">Description</th>
-                <th class="w-16 px-2 py-1 text-right font-normal">Qty</th>
-                <th class="w-40 px-3 py-1 text-left font-normal">Fits</th>
-              </tr>
-            </thead>
-            <tbody>
-              {#each visibleCallouts as item (`${item.reference}-${item.sequence}-${item.part}`)}
-                <tr class="border-b border-rule hover:bg-elevated">
-                  <td class="px-3 py-1 font-mono text-accent">
-                    {item.reference}{#if item.sequence > 1}<span class="text-faint"
-                        >.{item.sequence}</span
-                      >{/if}
-                  </td>
-                  <td class="px-2 py-1 font-mono text-foreground">{item.part}</td>
-                  <td class="px-2 py-1 text-muted">
-                    {item.name ?? ""}
-                    {#if item.qualifier}<span class="text-faint">{item.qualifier}</span>{/if}
-                  </td>
-                  <td class="px-2 py-1 text-right font-mono text-muted">{item.quantity ?? ""}</td>
-                  <td
-                    class="px-3 py-1 font-mono {browse.source
-                      ? mark(browse.calloutFit.get(calloutKey(item)))
-                      : 'text-warn'}"
-                    title={[
-                      browse.source ? label(browse.calloutFit.get(calloutKey(item))) : "",
-                      item.formula ? explainPattern(item.formula) : "",
-                    ]
-                      .filter(Boolean)
-                      .join(" — ")}
-                  >
-                    {#if browse.source}<span class="mr-1"
-                        >{glyph(browse.calloutFit.get(calloutKey(item)))}</span
-                      >{/if}{item.formula ?? ""}
-                  </td>
-                </tr>
-              {:else}
-                <tr
-                  ><td colspan="5" class="px-3 py-3 text-center text-faint"
-                    >{browse.callouts.length
-                      ? "Every callout is filtered out for this version."
-                      : "No callouts."}</td
-                  ></tr
-                >
-              {/each}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    {/if}
   </div>
+
+  {#if browse.drawing}
+    <!--
+      What is on screen, named. The pattern is shown verbatim and marked as
+      such: the grammar is characterised but never checked against a real car,
+      so eperx shows the expression as well as its verdict and puts it in words
+      — the reader can then disagree with it rather than having to trust it.
+    -->
+    <footer
+      class="flex shrink-0 flex-wrap items-baseline gap-x-3 gap-y-0.5 border-t border-divider
+             bg-surface px-3 py-1 text-[10px]"
+    >
+      <span class="font-mono text-muted">{browse.drawing.table}</span>
+      <span class="font-mono text-faint">v{browse.drawing.variant}</span>
+      {#if browse.drawing.name}
+        <span class="text-muted">{browse.drawing.name}</span>
+      {/if}
+      {#if browse.drawing.pattern}
+        {@const verdict = browse.fit.get(drawingKey(browse.drawing))}
+        <span class="uppercase tracking-wide text-faint">{t("drawing.fits")}</span>
+        <span class="font-mono {browse.source ? mark(verdict) : 'text-warn'}">
+          {#if browse.source}{glyph(verdict)} {/if}{browse.drawing.pattern}
+        </span>
+        <span class="min-w-0 flex-1 truncate text-faint" title={explainPattern(browse.drawing.pattern)}>
+          {explainPattern(browse.drawing.pattern)}
+        </span>
+      {/if}
+    </footer>
+  {/if}
 </div>

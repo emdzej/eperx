@@ -16,7 +16,12 @@
     "meta": "{{width}}×{{height}} · {{count}} odnośników",
     "callouts_one": "{{count}} odnośnik",
     "callouts_few": "{{count}} odnośniki",
-    "callouts_many": "{{count}} odnośników"
+    "callouts_many": "{{count}} odnośników",
+    "variants_one": "{{count}} rysunek",
+    "variants_few": "{{count}} rysunki",
+    "variants_many": "{{count}} rysunków",
+    "variantsOf": "{{shown}} z {{total}}",
+    "fits": "Pasuje"
   },
   "footer": {
     "queries": "Zapytania SQL wykonane na drzewie",
@@ -49,7 +54,9 @@
     "unknown": "nie ustalono",
     "copyPart": "Kopiuj numer części",
     "copyName": "Kopiuj opis",
-    "usages": "Wybierz część, aby zobaczyć wszystkie rysunki, na których występuje."
+    "usages": "Wybierz część, aby zobaczyć wszystkie rysunki, na których występuje.",
+    "allFiltered": "Ukryto wszystkie odnośniki: ten pojazd nie może mieć żadnego z nich.",
+    "noCallouts": "Brak odnośników na tym rysunku."
   },
   "rail": {
     "group": "Grupa",
@@ -60,6 +67,19 @@
     "chooseGroup": "Wybierz grupę.",
     "noGroups": "Brak pasujących grup.",
     "noSubgroups": "Brak podgrup."
+  },
+  "search": {
+    "title": "Wyszukiwanie",
+    "results_one": "{{count}} część",
+    "results_few": "{{count}} części",
+    "results_many": "{{count}} części",
+    "close": "Zamknij wyniki",
+    "usages_one": "na {{count}} rysunku",
+    "usages_few": "na {{count}} rysunkach",
+    "usages_many": "na {{count}} rysunkach",
+    "unit": "jedn.",
+    "minimum": "min",
+    "pickPart": "Wybierz część, aby zobaczyć wszystkie rysunki, na których występuje."
   },
   "settings": {
     "title": "Ustawienia",
@@ -81,7 +101,14 @@
     "filterTitle": "Ukryj rysunki i części, których ten pojazd na pewno mieć nie może",
     "fromVin": "Z zapisu produkcyjnego tego egzemplarza",
     "fromVersion": "Z wersji",
-    "noVehicle": "Nie wybrano pojazdu — widoczne są wszystkie rysunki"
+    "noVehicle": "Nie wybrano pojazdu — widoczne są wszystkie rysunki",
+    "mvs": "MVS",
+    "chassis": "Nadwozie",
+    "engine": "Silnik",
+    "built": "Zbudowano",
+    "interior": "Wnętrze",
+    "sincom": "Sincom",
+    "doors": "Drzwi"
   },
   "theme": {
     "auto": "Motyw: zgodnie z urządzeniem",
