@@ -2,6 +2,7 @@ import type { CsFileSystem } from "@emdzej/csfs-core";
 import { fsaFileSystem } from "@emdzej/csfs-fsa";
 import { httpFileSystem } from "@emdzej/csfs-http";
 import { opfsFileSystem } from "@emdzej/csfs-opfs";
+import { OPFS_NAMESPACE } from "./opfs-namespace";
 import type { MountKind } from "./mount";
 
 /**
@@ -39,11 +40,9 @@ export async function dataFileSystem(
     return fsaFileSystem(options.handle);
   }
 
-  // Rooted at the origin's private file system, not a namespace beneath it.
-  // The service worker serves `/__eperx/opfs/...` from that root and the
-  // import writes there, so the two have to agree; eperx is the only thing on
-  // its origin, which is the case a namespace guards against.
-  return opfsFileSystem();
+  // Namespaced, and the service worker walks into the same directory — see
+  // `opfs-namespace.ts` for why every reader has to agree about this.
+  return opfsFileSystem({ namespace: OPFS_NAMESPACE });
 }
 
 /**

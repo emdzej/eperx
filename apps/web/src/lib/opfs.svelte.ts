@@ -7,6 +7,7 @@
  * 7.5 GB here — so the size is checked before anything is written rather than
  * discovered when a write fails half way through.
  */
+import { OPFS_NAMESPACE, opfsRoot } from "./opfs-namespace";
 
 export interface Component {
   /** Path within the tree, e.g. `images`. Empty for files at the root. */
@@ -96,7 +97,7 @@ export async function runImport(
   plan: ImportPlan,
   onProgress?: (progress: ImportProgress) => void,
 ): Promise<void> {
-  const root = await navigator.storage.getDirectory();
+  const root = await opfsRoot();
   let filesDone = 0;
   let bytesDone = 0;
 
@@ -128,7 +129,7 @@ export async function runImport(
 /** Is there already a tree in OPFS? */
 export async function opfsHasTree(): Promise<boolean> {
   try {
-    const root = await navigator.storage.getDirectory();
+    const root = await opfsRoot();
     await root.getFileHandle("catalogue.sqlite");
     return true;
   } catch {
@@ -139,7 +140,7 @@ export async function opfsHasTree(): Promise<boolean> {
 /** What is in OPFS now, so the user can see it and clear it. */
 export async function opfsContents(): Promise<Component[]> {
   const out: Component[] = [];
-  const root = await navigator.storage.getDirectory();
+  const root = await opfsRoot();
   const walk = async (dir: FileSystemDirectoryHandle, path: string) => {
     for await (const [name, handle] of dir as unknown as AsyncIterable<
       [string, FileSystemHandle]
@@ -159,10 +160,20 @@ export async function opfsContents(): Promise<Component[]> {
   return out;
 }
 
-/** Delete everything eperx put in OPFS. */
+/**
+ * Delete the copy.
+ *
+ * The namespace directory itself, not a sweep of its contents — and
+ * definitely not a sweep of the origin, which is what this did when eperx was
+ * rooted there. A copy that cannot be removed is a few hundred megabytes of
+ * quota with no way out but clearing all site data.
+ */
 export async function clearOpfs(): Promise<void> {
-  const root = await navigator.storage.getDirectory();
-  for await (const [name] of root as unknown as AsyncIterable<[string, FileSystemHandle]>) {
-    await root.removeEntry(name, { recursive: true });
+  const origin = await navigator.storage.getDirectory();
+  try {
+    await origin.removeEntry(OPFS_NAMESPACE, { recursive: true });
+  } catch (cause) {
+    // Already gone is success. Anything else is worth surfacing.
+    if ((cause as DOMException)?.name !== "NotFoundError") throw cause;
   }
 }

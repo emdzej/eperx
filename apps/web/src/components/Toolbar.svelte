@@ -51,7 +51,16 @@
   let partQuery = $state("");
   let chassisAvailable = $state(false);
 
+  /*
+   * Re-asked whenever the tree changes, not once on mount.
+   *
+   * `tree.base` is read *before* the await so the effect actually depends on
+   * it — a read after one is not tracked, which is how this came to answer
+   * from the placeholder base and never ask again.
+   */
   $effect(() => {
+    void tree.base;
+    void tree.catalogue;
     void hasChassisData().then((available) => (chassisAvailable = available));
   });
 

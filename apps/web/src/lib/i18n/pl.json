@@ -5,6 +5,18 @@
     "chooseSource": "Wybierz źródło",
     "notConnected": "Drzewo nie jest otwarte."
   },
+  "backup": {
+    "title": "Twoje własne dane",
+    "note": "Koszyk, notatki, język interfejsu i miejsce, w którym byłeś. Żadnego z tego nie da się odtworzyć z płyty — dlatego to jedyne, co warto tu archiwizować.",
+    "export": "Eksportuj kopię",
+    "import": "Importuj kopię",
+    "file": "eperx-kopia.json",
+    "imported": "Zaimportowano: {{added}} nowych notatek, {{updated}} zaktualizowanych, {{kept}} zachowanych; {{bin}} pozycji koszyka.",
+    "importedPrefs": "Przywrócono ustawienia — odśwież, aby je zastosować.",
+    "importFailed": "Ten plik nie zawierał niczego, co eperx potrafi odczytać.",
+    "sourceNote": "Źródło danych nie jest zapisywane: zapisanego folderu nie da się serializować, a adres najlepiej przekazać linkiem ?data=.",
+    "clearNotes": "Usuń wszystkie notatki"
+  },
   "bin": {
     "title": "Koszyk części",
     "open": "Otwórz koszyk",

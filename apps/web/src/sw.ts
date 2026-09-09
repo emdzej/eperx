@@ -1,4 +1,6 @@
 /// <reference lib="webworker" />
+import { opfsRoot } from "./lib/opfs-namespace";
+
 export {};
 
 declare global {
@@ -268,7 +270,7 @@ async function resolve(mount: string, path: string): Promise<File | undefined> {
   const cached = handles.get(cacheKey);
   if (cached) return cached.getFile();
 
-  const root = mount === "opfs" ? await navigator.storage.getDirectory() : mounts.get(mount);
+  const root = mount === "opfs" ? await opfsRoot() : mounts.get(mount);
   if (!root) throw new Error(`${mount} is not mounted`);
 
   const segments = path.split("/").filter(Boolean);

@@ -8,6 +8,11 @@
       name="description"
       content="Browser client for the ePER Fiat group parts catalogue. Reads the original data client-side; no backend."
     />
+    <!-- Relative, like the manifest's own scope: a build can be served from a
+         subdirectory and these have to resolve against wherever it landed. -->
+    <link rel="icon" type="image/png" href="./favicon.png" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+    <meta name="theme-color" content="#008C45" />
     <script>
       // Apply the persisted theme before mount, so the first paint matches and
       // the page does not flash the wrong palette.

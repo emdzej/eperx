@@ -35,7 +35,8 @@ import MDBReader from "mdb-reader";
 import { Buffer } from "buffer";
 import type { CsFile, CsFileSystem, WritableFileSystem } from "@emdzej/csfs-core";
 import { fsaFileSystem } from "@emdzej/csfs-fsa";
-import { opfsFileSystem } from "@emdzej/csfs-opfs";
+import { opfsFileSystem, persist } from "@emdzej/csfs-opfs";
+import { OPFS_NAMESPACE } from "./opfs-namespace";
 import { clearImportPool, openWasmSqlWriter } from "./sql-writer";
 
 /** Look at a disc and report what it holds, without writing anything. */
@@ -195,7 +196,16 @@ async function discLanguages(
 
 async function run(request: RunRequest): Promise<void> {
   const fs = fsaFileSystem(request.source);
-  const target = await opfsFileSystem();
+  const target = await opfsFileSystem({ namespace: OPFS_NAMESPACE });
+  /*
+   * Ask for the copy not to be evicted.
+   *
+   * The origin private file system is evictable unless persistence is granted,
+   * and a tree that vanished under storage pressure would be the one failure
+   * this feature exists to prevent. The answer is the browser's — Chrome
+   * decides from engagement — so it is asked for and not depended on.
+   */
+  await persist().catch(() => false);
   const disc = await openDisc(fs);
 
   if (!disc.files.spareParts) throw new Error("this disc has no spare-parts database");

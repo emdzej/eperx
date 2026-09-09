@@ -20,7 +20,7 @@
     selectSubgroup,
   } from "./lib/browse.svelte";
   import { hasManifest, mount } from "./lib/mount";
-  import { readSettings } from "./lib/settings";
+  import { readSettings, saveSettings } from "./lib/settings";
   import { connect, setLanguage, stats, tree } from "./lib/tree.svelte";
 
   let aboutOpen = $state(false);
@@ -75,8 +75,50 @@
     void resume();
   });
 
+  /**
+   * A tree named in the URL.
+   *
+   * `?data=<url>` opens a hosted tree, overriding whatever was saved — and is
+   * then **remembered**, so a later visit without the parameter opens the same
+   * one. That is deliberate: a link handed to a colleague should set their
+   * source up rather than work once. It is undone from the settings panel like
+   * any other source.
+   *
+   * The parameter is stripped from the address bar afterwards, so a reload or
+   * a bookmark is the app's own state rather than the link that seeded it.
+   */
+  async function openFromUrl(url: string): Promise<boolean> {
+    try {
+      const base = await mount("remote", { base: url });
+      if (!(await hasManifest(base))) {
+        throw new Error(`${url} does not hold an imported tree`);
+      }
+      await saveSettings({ kind: "remote", base: url });
+      await connect(base, { kind: "remote" });
+      if (tree.catalogue) {
+        await loadMakes();
+        await restoreSelection();
+      }
+      const clean = new URL(location.href);
+      clean.searchParams.delete("data");
+      history.replaceState(null, "", clean);
+      return true;
+    } catch (error) {
+      resumeError = error instanceof Error ? error.message : String(error);
+      settingsOpen = true;
+      return false;
+    }
+  }
+
   async function resume() {
     try {
+      // Before anything saved: a link is an explicit instruction, and it wins.
+      const fromUrl = new URLSearchParams(location.search).get("data");
+      if (fromUrl) {
+        await openFromUrl(fromUrl);
+        return;
+      }
+
       const resumable = await readSettings();
       if (resumable.permission === "missing" && !resumable.settings.savedAt) {
         firstRun = true;

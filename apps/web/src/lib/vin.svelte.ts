@@ -52,22 +52,40 @@ interface ChassisManifest {
   files: { chassis?: string; build?: string };
 }
 
-let manifest: ChassisManifest | undefined | null;
+/**
+ * Memoised per tree, keyed by the base it was read from.
+ *
+ * Keyed, not just cached. The toolbar asks this as it mounts, which is before
+ * a tree has been opened — so an unkeyed memo recorded "no chassis files" from
+ * the placeholder base and then answered that forever, leaving the VIN box
+ * disabled against a tree that has them. The key is what makes the answer
+ * belong to a particular tree.
+ */
+let cached: { base: string; manifest: ChassisManifest | null } | undefined;
 
 async function chassisManifest(): Promise<ChassisManifest | undefined> {
-  if (manifest !== undefined) return manifest ?? undefined;
+  const base = tree.base;
+  if (cached?.base === base) return cached.manifest ?? undefined;
   try {
-    const response = await fetch(`${tree.base}/manifest.json`);
+    const response = await fetch(`${base}/manifest.json`);
+    if (!response.ok) throw new Error(String(response.status));
     const body = (await response.json()) as { chassis?: ChassisManifest };
-    manifest = body.chassis ?? null;
+    cached = { base, manifest: body.chassis ?? null };
   } catch {
-    manifest = null;
+    cached = { base, manifest: null };
   }
-  return manifest ?? undefined;
+  return cached.manifest ?? undefined;
 }
 
-/** True when this tree was imported with the chassis files. */
+/**
+ * True when this tree was imported with the chassis files.
+ *
+ * Answers `false` before a tree is open rather than probing a base that is
+ * only a placeholder — which is what asked a static host for
+ * `/data/manifest.json` and 404ed.
+ */
 export async function hasChassisData(): Promise<boolean> {
+  if (!tree.catalogue) return false;
   return (await chassisManifest()) !== undefined;
 }
 

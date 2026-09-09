@@ -5,6 +5,18 @@
     "chooseSource": "Choose a source",
     "notConnected": "The tree is not open."
   },
+  "backup": {
+    "title": "Your own data",
+    "note": "The bin, your notes, the interface language and where you were. None of it can be re-derived from a disc, which is why it is the only thing here worth backing up.",
+    "export": "Export a backup",
+    "import": "Import a backup",
+    "file": "eperx-backup.json",
+    "imported": "Imported: {{added}} notes added, {{updated}} updated, {{kept}} kept; {{bin}} bin lines.",
+    "importedPrefs": "Preferences restored — reload to apply them.",
+    "importFailed": "That file held nothing eperx could read.",
+    "sourceNote": "The data source is not included: a saved folder cannot be serialised, and a hosted URL is better handed over as a ?data= link.",
+    "clearNotes": "Delete all notes"
+  },
   "bin": {
     "title": "Parts bin",
     "open": "Open the parts bin",

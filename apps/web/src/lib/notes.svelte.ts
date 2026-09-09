@@ -15,59 +15,26 @@
  * `localStorage` — which a cleared cache takes with it. Hence import and
  * export: the notes are worth backing up in a way nothing else in eperx is,
  * because everything else can be re-derived from a disc.
+ *
+ * The shapes it will accept live in `notes-format.ts`, a plain module, so a
+ * test can reach them without the Svelte compiler in the way.
  */
+import { clean, normalise, NOTE_LIMIT, type PartNote } from "./notes-format";
 
-export interface PartNote {
-  partNumber: string;
-  text: string;
-  /** Milliseconds, stamped on write. Carried through export so a merge can pick. */
-  updated: number;
-}
+export { normalise, NOTE_LIMIT, type PartNote };
 
 const KEY = "eperx.notes";
-/** Long enough for a real description, short enough not to become a document. */
-export const NOTE_LIMIT = 500;
-
-const clean = (text: string): string => text.trim().slice(0, NOTE_LIMIT);
 
 function stored(): Record<string, PartNote> {
   try {
     const raw = localStorage.getItem(KEY);
-    if (!raw) return {};
-    return normalise(JSON.parse(raw));
+    // Through `normalise` rather than trusted: this is user-editable storage,
+    // and it reads the same shapes an imported file may carry.
+    return raw ? normalise(JSON.parse(raw)) : {};
   } catch {
+    // Malformed, or storage blocked. Starting empty beats refusing to start.
     return {};
   }
-}
-
-/**
- * Accept anything shaped like notes, from storage or from an imported file.
- *
- * Two shapes are read: the object this writes, and a plain
- * `{ "55189942": "text" }` map — because that is what someone will hand-write
- * or produce from a spreadsheet, and refusing it would be pedantry. Anything
- * else in the file is dropped rather than failing the whole import: a partial
- * restore beats none.
- */
-export function normalise(input: unknown): Record<string, PartNote> {
-  if (typeof input !== "object" || input === null) return {};
-  const source =
-    "notes" in input && typeof (input as { notes: unknown }).notes === "object"
-      ? ((input as { notes: Record<string, unknown> }).notes ?? {})
-      : (input as Record<string, unknown>);
-
-  const out: Record<string, PartNote> = {};
-  for (const [partNumber, value] of Object.entries(source)) {
-    if (!partNumber) continue;
-    const text = typeof value === "string" ? value : (value as PartNote)?.text;
-    if (typeof text !== "string" || clean(text) === "") continue;
-    const updated =
-      typeof value === "object" && Number.isFinite((value as PartNote)?.updated)
-        ? (value as PartNote).updated
-        : 0;
-    out[partNumber] = { partNumber, text: clean(text), updated };
-  }
-  return out;
 }
 
 class Notes {

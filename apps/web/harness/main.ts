@@ -12,6 +12,7 @@
  * Not part of the app build. `harness/vite.config.ts` builds it on its own.
  */
 import type { ImportResponse } from "../src/lib/import.worker";
+import { OPFS_NAMESPACE } from "../src/lib/opfs-namespace";
 
 const out = document.getElementById("out")!;
 const lines: string[] = [];
@@ -124,7 +125,9 @@ async function main(): Promise<void> {
 
 /** What ended up in OPFS, checked the way a client would read it. */
 async function verify(): Promise<void> {
-  const root = await navigator.storage.getDirectory();
+  // The tree is written inside eperx's namespace, so that is where to look.
+  const origin = await navigator.storage.getDirectory();
+  const root = await origin.getDirectoryHandle(OPFS_NAMESPACE);
   const names: string[] = [];
   for await (const name of root.keys()) names.push(name);
   log(`tree holds: ${names.sort().join(", ")}`);

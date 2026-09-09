@@ -208,6 +208,41 @@ export default defineConfig({
          */
         rollupFormat: "iife",
       },
+      manifest: {
+        name: "eperx — Fiat group parts catalogue",
+        short_name: "eperx",
+        description:
+          "The ePER parts catalogue for Fiat, Lancia, Alfa Romeo, Abarth, LCV and " +
+          "Chrysler, read in the browser from your own disc. No backend.",
+        /*
+         * The interface's own colours, so the splash and the title bar are not
+         * a different product to the app: Italian green as the accent and the
+         * flag's off-white as the page, which is what the light palette is.
+         */
+        theme_color: "#008C45",
+        background_color: "#F4F5F0",
+        display: "standalone",
+        orientation: "any",
+        /*
+         * Relative, both of them. A build served from `<user>.github.io/<repo>/`
+         * needs a scope under that prefix, and an absolute `/` would claim the
+         * whole origin and fail to install.
+         */
+        start_url: ".",
+        scope: ".",
+        icons: [
+          { src: "icon-192.png", sizes: "192x192", type: "image/png" },
+          { src: "icon-512.png", sizes: "512x512", type: "image/png" },
+          // Android crops an icon to the launcher's shape; a maskable one is
+          // drawn with the margin that survives it.
+          {
+            src: "icon-maskable-512.png",
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "maskable",
+          },
+        ],
+      },
       // Development serves the real files; a cached shell there means editing
       // one and being served the previous one.
       devOptions: { enabled: false },

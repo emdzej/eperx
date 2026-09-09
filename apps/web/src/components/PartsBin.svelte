@@ -14,7 +14,8 @@
   import Download from "@lucide/svelte/icons/download";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import X from "@lucide/svelte/icons/x";
-  import { bin, download, toCsv } from "../lib/bin.svelte";
+  import { bin } from "../lib/bin.svelte";
+import { download, toCsv } from "../lib/csv";
   import { i18n } from "../lib/i18n/index.svelte";
   import { notes } from "../lib/notes.svelte";
 
