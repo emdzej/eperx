@@ -1,0 +1,122 @@
+{
+  "app": {
+    "tagline": "Katalog części ePER, czytany w przeglądarce",
+    "opening": "Otwieranie zapisanego źródła…",
+    "chooseSource": "Wybierz źródło",
+    "notConnected": "Drzewo nie jest otwarte."
+  },
+  "drawing": {
+    "none": "Brak obrazu dla tego rysunku.",
+    "pickSubgroup": "Wybierz podgrupę.",
+    "copy": "Kopiuj rysunek",
+    "copied": "Skopiowano",
+    "expand": "Wypełnij okno",
+    "shrink": "Dopasuj do okna",
+    "variant": "Wariant {{number}}",
+    "meta": "{{width}}×{{height}} · {{count}} odnośników",
+    "callouts_one": "{{count}} odnośnik",
+    "callouts_few": "{{count}} odnośniki",
+    "callouts_many": "{{count}} odnośników"
+  },
+  "footer": {
+    "queries": "Zapytania SQL wykonane na drzewie",
+    "drawingBytes": "Sam rysunek, jeden odczyt zakresu",
+    "dismiss": "Zamknij"
+  },
+  "language": {
+    "label": "Język",
+    "auto": "Automatycznie",
+    "en": "English",
+    "pl": "Polski"
+  },
+  "parts": {
+    "title": "Części",
+    "ref": "Nr",
+    "part": "Część",
+    "description": "Opis",
+    "quantity": "Ilość",
+    "applies": "Dotyczy",
+    "thisVehicle": "Ten pojazd",
+    "rows_one": "{{shown}} z {{total}} wiersza",
+    "rows_few": "{{shown}} z {{total}} wierszy",
+    "rows_many": "{{shown}} z {{total}} wierszy",
+    "hidden_one": "Ukryto {{count}} wiersz: ten pojazd nie może go mieć.",
+    "hidden_few": "Ukryto {{count}} wiersze: ten pojazd nie może ich mieć.",
+    "hidden_many": "Ukryto {{count}} wierszy: ten pojazd nie może ich mieć.",
+    "empty": "Wybierz podgrupę, aby zobaczyć jej części.",
+    "fits": "pasuje",
+    "unfit": "nie pasuje",
+    "unknown": "nie ustalono",
+    "copyPart": "Kopiuj numer części",
+    "copyName": "Kopiuj opis",
+    "usages": "Wybierz część, aby zobaczyć wszystkie rysunki, na których występuje."
+  },
+  "rail": {
+    "group": "Grupa",
+    "subgroup": "Podgrupa",
+    "filterGroups": "filtruj grupy",
+    "filterSubgroups": "filtruj podgrupy",
+    "chooseCatalogue": "Wybierz katalog powyżej.",
+    "chooseGroup": "Wybierz grupę.",
+    "noGroups": "Brak pasujących grup.",
+    "noSubgroups": "Brak podgrup."
+  },
+  "settings": {
+    "title": "Ustawienia",
+    "sections": "Sekcje ustawień",
+    "tab": {
+      "data": "Dane",
+      "interface": "Interfejs"
+    },
+    "interfaceLanguage": "Język interfejsu",
+    "interfaceLanguageNote": "Język, w którym mówi samo eperx. Język tekstów katalogu wybiera się na pasku narzędzi i zależy od tego, z jakimi językami zaimportowano drzewo.",
+    "themeNote": "Automatyczny podąża za tym urządzeniem.",
+    "theme": "Motyw"
+  },
+  "strip": {
+    "version": "Wersja",
+    "vin": "VIN",
+    "clear": "Wyczyść wybrany pojazd",
+    "filter": "filtruj",
+    "filterTitle": "Ukryj rysunki i części, których ten pojazd na pewno mieć nie może",
+    "fromVin": "Z zapisu produkcyjnego tego egzemplarza",
+    "fromVersion": "Z wersji",
+    "noVehicle": "Nie wybrano pojazdu — widoczne są wszystkie rysunki"
+  },
+  "theme": {
+    "auto": "Motyw: zgodnie z urządzeniem",
+    "light": "Motyw: jasny",
+    "dark": "Motyw: ciemny",
+    "change": "Kliknij, aby zmienić."
+  },
+  "toolbar": {
+    "about": "O eperx",
+    "release": "Informacje o wydaniu {{version}}",
+    "repo": "Kod na GitHubie",
+    "settings": "Ustawienia",
+    "make": "Marka",
+    "model": "Model",
+    "catalogue": "Katalog",
+    "vehicle": "Pojazd",
+    "vin": "VIN",
+    "decode": "Szukaj",
+    "vinPlaceholder": "17-znakowy VIN",
+    "choose": "wybierz",
+    "any": "dowolny",
+    "none": "brak",
+    "pickCatalogue": "wybierz katalog",
+    "search": "Szukaj",
+    "searchPlaceholder": "numer części",
+    "language": "Język katalogu",
+    "readingFrom": "Skąd czytany jest katalog"
+  },
+  "vin": {
+    "title": "Znajdź pojazd po numerze VIN",
+    "unavailable": "To drzewo zaimportowano bez plików nadwozia",
+    "notOnDisc": "Nie ma go na tej płycie.",
+    "reaches": "model {{model}} sięga do {{chassis}}",
+    "beyond": "— ten jest poza tym zakresem",
+    "snapshot": "Płyta to zdjęcie stanu; pojazdy zbudowane po jej wydaniu nie występują.",
+    "explain": "VIN grupy Fiata zawiera kod typu modelu i numer nadwozia — właśnie tak zbudowany jest indeks ePER-a."
+  }
+}

@@ -20,8 +20,10 @@
     "@eperx/core": "workspace:*",
     "@eperx/importer": "workspace:*",
     "@eperx/ktd": "workspace:*",
+    "@lucide/svelte": "^1.43.0",
     "@sqlite.org/sqlite-wasm": "3.53.0-build1",
     "buffer": "^6.0.3",
+    "i18next": "^26.4.2",
     "mdb-reader": "^3.2.0",
     "sqlite-wasm-http": "^1.2.0"
   },

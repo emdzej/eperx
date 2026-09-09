@@ -6,6 +6,8 @@
   import SelectorBar from "./components/SelectorBar.svelte";
   import SettingsDialog from "./components/SettingsDialog.svelte";
   import ThemeToggle from "./components/ThemeToggle.svelte";
+  import Cog from "@lucide/svelte/icons/cog";
+  import { i18n } from "./lib/i18n/index.svelte";
   import { browse, loadMakes, restoreSelection, runSearch } from "./lib/browse.svelte";
   import { hasManifest, mount } from "./lib/mount";
   import { readSettings } from "./lib/settings";
@@ -19,6 +21,8 @@
   let resuming = $state(true);
   let resumeError = $state<string | undefined>(undefined);
   let warningDismissed = $state(false);
+
+  const t = $derived(i18n.t);
 
   // Part results take over the main pane while there are any; clearing the
   // box returns to the drawing, so there is no mode to get stuck in.
@@ -103,9 +107,9 @@
     <button
       class="font-mono text-lg font-semibold tracking-tight"
       onclick={() => (aboutOpen = true)}
-      title="About eperx"
+      title={t("toolbar.about")}
       aria-haspopup="dialog"
-      aria-label="About eperx"
+      aria-label={t("toolbar.about")}
     >
       <span class="text-foreground">eper</span><span class="text-accent">x</span>
     </button>
@@ -116,7 +120,7 @@
       href={`${__REPO_URL__}/releases/tag/${__APP_VERSION__}`}
       target="_blank"
       rel="noopener noreferrer"
-      title="Release notes"
+      title={t("toolbar.release", { version: __APP_VERSION__ })}
     >
       {__APP_VERSION__}
     </a>
@@ -126,8 +130,8 @@
       href={__REPO_URL__}
       target="_blank"
       rel="noopener noreferrer"
-      title="Source on GitHub"
-      aria-label="Source on GitHub"
+      title={t("toolbar.repo")}
+      aria-label={t("toolbar.repo")}
     >
       <!-- GitHub's own mark, inlined so it takes currentColor and needs no fetch. -->
       <svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor" aria-hidden="true">
@@ -144,7 +148,7 @@
         class="w-56 rounded border border-divider bg-base px-2 py-1 font-mono text-xs
                outline-none focus:border-accent"
         bind:value={query}
-        placeholder="part number"
+        placeholder={t("toolbar.searchPlaceholder")}
         onkeydown={(e) => e.key === "Enter" && search()}
       />
       <button
@@ -173,36 +177,11 @@
       class="rounded px-2 py-1 text-muted transition-colors hover:bg-elevated
              hover:text-foreground"
       onclick={() => (settingsOpen = true)}
-      title="Settings"
+      title={t("toolbar.settings")}
       aria-haspopup="dialog"
-      aria-label="Settings"
+      aria-label={t("toolbar.settings")}
     >
-      <!--
-        Lucide's `settings` geometry, inlined. ISC licensed — © Lucide Icons
-        and Contributors — and copied rather than depended on because eperx
-        draws exactly two icons: the package cost 4.9 kB gzipped on a 55 kB
-        app, which is poor value for one glyph. Add the dependency if a third
-        icon ever appears.
-
-        What was here before was hand-drawn, filled, and had stubby
-        trapezoidal teeth; at 14px it read as a flower rather than a gear.
-      -->
-      <svg
-        viewBox="0 0 24 24"
-        width="15"
-        height="15"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.75"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        aria-hidden="true"
-      >
-        <path
-          d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"
-        />
-        <circle cx="12" cy="12" r="3" />
-      </svg>
+      <Cog size={15} />
     </button>
 
     <ThemeToggle />
@@ -211,7 +190,7 @@
   {#if !tree.catalogue}
     <main class="flex min-h-0 flex-1 items-center justify-center">
       {#if resuming}
-        <p class="text-xs text-faint">Opening the saved source…</p>
+        <p class="text-xs text-faint">{t("app.opening")}</p>
       {:else if resumeError}
         <div class="max-w-md space-y-2 text-center">
           <p class="text-xs text-danger">{resumeError}</p>
@@ -220,7 +199,7 @@
                    transition-colors hover:bg-elevated"
             onclick={() => (settingsOpen = true)}
           >
-            Choose a source
+            {t("app.chooseSource")}
           </button>
         </div>
       {:else if !settingsOpen}
@@ -229,7 +208,7 @@
                  transition-colors hover:bg-elevated"
           onclick={() => (settingsOpen = true)}
         >
-          Choose a source
+          {t("app.chooseSource")}
         </button>
       {/if}
     </main>
@@ -253,8 +232,8 @@
           <button
             class="shrink-0 text-warn/70 transition-colors hover:text-warn"
             onclick={() => (warningDismissed = true)}
-            aria-label="Dismiss"
-            title="Dismiss"
+            aria-label={t("footer.dismiss")}
+            title={t("footer.dismiss")}
           >
             &times;
           </button>
@@ -285,18 +264,18 @@
           </span>
         {/if}
         <div class="flex-1"></div>
-        <span class="text-faint" title="Where the catalogue is being read from">
+        <span class="text-faint" title={t("toolbar.readingFrom")}>
           {tree.kind}
         </span>
         <!-- Query count, not bytes: SQLite fetches its pages from inside a
              worker, whose resource timings the main thread cannot see, so a
              byte figure here would be a plausible-looking zero. The image is
              read by our own code, so that one is real. -->
-        <span class="text-faint" title="SQL statements run against the tree">
+        <span class="text-faint" title={t("footer.queries")}>
           {stats.queries} queries
         </span>
         {#if browse.imageBytes}
-          <span class="text-accent" title="The drawing itself, one ranged read">
+          <span class="text-accent" title={t("footer.drawingBytes")}>
             img {kb(browse.imageBytes)}
           </span>
         {/if}

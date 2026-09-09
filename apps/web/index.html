@@ -9,13 +9,20 @@
       content="Browser client for the ePER Fiat group parts catalogue. Reads the original data client-side; no backend."
     />
     <script>
-      // Apply persisted theme before mount so the first paint matches.
-      // Default is LIGHT — the Italian flag off-white (#F4F5F0) sits as the
-      // page background and the green/red accents pop against it. Dark mode
-      // is opt-in via the header toggle.
+      // Apply the persisted theme before mount, so the first paint matches and
+      // the page does not flash the wrong palette.
+      //
+      // Three states. `auto` — the default, and anything unrecognised — asks
+      // the machine; `light` and `dark` are explicit. The light palette is the
+      // Italian flag off-white (#F4F5F0), which the green and red accents pop
+      // against, so light is what `auto` resolves to on a machine with no
+      // preference.
       try {
-        const t = localStorage.getItem("eperx.theme") ?? "light";
-        if (t === "dark") document.documentElement.classList.add("dark");
+        const saved = localStorage.getItem("eperx.theme");
+        const dark =
+          saved === "dark" ||
+          (saved !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+        if (dark) document.documentElement.classList.add("dark");
       } catch {}
     </script>
   </head>

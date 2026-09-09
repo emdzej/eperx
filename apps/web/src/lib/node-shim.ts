@@ -34,7 +34,13 @@ interface NodeProcess {
   cwd: () => string;
 }
 
-const target = globalThis as { Buffer?: typeof Buffer; process?: NodeProcess };
+/*
+ * Through `unknown`: `@types/node` arrives transitively and types
+ * `globalThis.process` as Node's own `Process`, which does not overlap with
+ * the handful of fields declared above. The cast records that the two are
+ * deliberately different — this is a stand-in, not Node.
+ */
+const target = globalThis as unknown as { Buffer?: typeof Buffer; process?: NodeProcess };
 
 target.Buffer ??= Buffer;
 target.process ??= {

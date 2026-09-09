@@ -1,0 +1,119 @@
+{
+  "app": {
+    "tagline": "ePER parts catalogue, read in the browser",
+    "opening": "Opening the saved source…",
+    "chooseSource": "Choose a source",
+    "notConnected": "The tree is not open."
+  },
+  "drawing": {
+    "none": "No image for this drawing.",
+    "pickSubgroup": "Pick a subgroup.",
+    "copy": "Copy the drawing",
+    "copied": "Copied",
+    "expand": "Fill the window",
+    "shrink": "Back to fit",
+    "variant": "Variant {{number}}",
+    "meta": "{{width}}×{{height}} · {{count}} callouts",
+    "callouts_one": "{{count}} callout",
+    "callouts_other": "{{count}} callouts"
+  },
+  "footer": {
+    "queries": "SQL statements run against the tree",
+    "drawingBytes": "The drawing itself, one ranged read",
+    "dismiss": "Dismiss"
+  },
+  "language": {
+    "label": "Language",
+    "auto": "Automatic",
+    "en": "English",
+    "pl": "Polski"
+  },
+  "parts": {
+    "title": "Parts",
+    "ref": "Ref",
+    "part": "Part",
+    "description": "Description",
+    "quantity": "Qty",
+    "applies": "Applies",
+    "thisVehicle": "This vehicle",
+    "rows_one": "{{shown}} of {{total}} row",
+    "rows_other": "{{shown}} of {{total}} rows",
+    "hidden_one": "{{count}} row hidden: this vehicle cannot have it.",
+    "hidden_other": "{{count}} rows hidden: this vehicle cannot have them.",
+    "empty": "Pick a subgroup to see its parts.",
+    "fits": "fits",
+    "unfit": "does not fit",
+    "unknown": "not determined",
+    "copyPart": "Copy the part number",
+    "copyName": "Copy the description",
+    "usages": "Pick a part to see every drawing it appears on."
+  },
+  "rail": {
+    "group": "Group",
+    "subgroup": "Subgroup",
+    "filterGroups": "filter groups",
+    "filterSubgroups": "filter subgroups",
+    "chooseCatalogue": "Pick a catalogue above.",
+    "chooseGroup": "Pick a group.",
+    "noGroups": "No groups match.",
+    "noSubgroups": "No subgroups."
+  },
+  "settings": {
+    "title": "Settings",
+    "sections": "Settings sections",
+    "tab": {
+      "data": "Data",
+      "interface": "Interface"
+    },
+    "interfaceLanguage": "Interface language",
+    "interfaceLanguageNote": "The language of eperx's own words. The catalogue's own text is chosen in the toolbar, and depends on which languages the tree was imported with.",
+    "themeNote": "Auto follows this device.",
+    "theme": "Theme"
+  },
+  "strip": {
+    "version": "Version",
+    "vin": "VIN",
+    "clear": "Clear the chosen vehicle",
+    "filter": "filter",
+    "filterTitle": "Hide drawings and parts this vehicle definitely cannot have",
+    "fromVin": "From this car's build record",
+    "fromVersion": "From the version",
+    "noVehicle": "No vehicle chosen — every drawing is shown"
+  },
+  "theme": {
+    "auto": "Theme: follows this device",
+    "light": "Theme: light",
+    "dark": "Theme: dark",
+    "change": "Click to change."
+  },
+  "toolbar": {
+    "about": "About eperx",
+    "release": "Release notes for {{version}}",
+    "repo": "Source on GitHub",
+    "settings": "Settings",
+    "make": "Make",
+    "model": "Model",
+    "catalogue": "Catalogue",
+    "vehicle": "Vehicle",
+    "vin": "VIN",
+    "decode": "Find",
+    "vinPlaceholder": "17-character VIN",
+    "choose": "choose",
+    "any": "any",
+    "none": "none",
+    "pickCatalogue": "pick a catalogue",
+    "search": "Search",
+    "searchPlaceholder": "part number",
+    "language": "Catalogue language",
+    "readingFrom": "Where the catalogue is being read from"
+  },
+  "vin": {
+    "title": "Look the vehicle up by VIN",
+    "unavailable": "This tree was imported without the chassis files",
+    "notOnDisc": "Not on this disc.",
+    "reaches": "model {{model}} reaches {{chassis}}",
+    "beyond": "— this one is beyond it",
+    "snapshot": "A disc is a snapshot; vehicles built after it was pressed are absent.",
+    "explain": "A Fiat-group VIN carries the model type code and the chassis number, which is how ePER's own index is keyed."
+  }
+}

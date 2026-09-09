@@ -11,16 +11,25 @@
 -->
 <script lang="ts">
   import DataSettings from "./DataSettings.svelte";
+  import InterfaceSettings from "./InterfaceSettings.svelte";
+  import { i18n } from "../lib/i18n/index.svelte";
 
   let {
     onClose,
     firstRun = false,
   }: { onClose: () => void; firstRun?: boolean } = $props();
 
-  type Tab = "data";
+  type Tab = "data" | "interface";
   let tab = $state<Tab>("data");
 
-  const TABS: { id: Tab; label: string }[] = [{ id: "data", label: "Data" }];
+  const t = $derived(i18n.t);
+
+  // Labels are derived, not constant: a constant array would keep the
+  // language it was built with when the interface language changes.
+  const TABS = $derived<{ id: Tab; label: string }[]>([
+    { id: "data", label: t("settings.tab.data") },
+    { id: "interface", label: t("settings.tab.interface") },
+  ]);
 
   function onKey(event: KeyboardEvent): void {
     // A first run has nothing behind it, so Escape would leave a blank page.
@@ -75,7 +84,7 @@
       </p>
     {/if}
 
-    <nav class="flex gap-1 border-b border-divider px-3 pt-2" aria-label="Settings sections">
+    <nav class="flex gap-1 border-b border-divider px-3 pt-2" aria-label={t("settings.sections")}>
       {#each TABS as entry (entry.id)}
         <button
           class="border-b-2 px-2 pb-1.5 text-xs transition-colors
@@ -91,7 +100,9 @@
     </nav>
 
     <div class="p-4">
-      {#if tab === "data"}
+      {#if tab === "interface"}
+        <InterfaceSettings />
+      {:else if tab === "data"}
         <DataSettings onOpened={onClose} />
       {/if}
     </div>
