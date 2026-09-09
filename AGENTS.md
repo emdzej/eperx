@@ -321,6 +321,57 @@ The general rule this is an instance of: **the local sources need a
 self-contained tree.** Anything that makes the tree cheaper by pointing outside
 it buys that saving with the folder and browser-storage modes.
 
+## One service worker, two jobs, and the order matters
+
+eperx's worker serves a picked folder and the origin private filesystem to
+SQLite over `Range`. It also carries the PWA shell, because there is one worker
+per scope and adding a second is not an option. That makes the ordering inside
+`fetch` load-bearing:
+
+1. `/__eperx/` is handled first and answers its own `206`.
+2. Anything carrying a `Range` header bails outright.
+3. Only then is a **whitelist** of precached shell URLs consulted.
+
+**A cached `200` must never answer a `Range` request.** Every read of
+`catalogue.sqlite` is "4 kB at this offset"; a worker answering one with a
+whole cached file returns the wrong bytes at every offset while SQLite decodes
+plausible garbage and reports nothing. A cache-first default would eventually
+do exactly that, which is why the worker stays hand-written and
+`vite-plugin-pwa` runs in `injectManifest` mode — all it does is supply the
+file list. Do not "simplify" this into a runtime-caching config.
+
+The precache includes `.wasm`, which is most of its 5.9 MB. Without it
+"offline" would mean the app launches and can read nothing.
+
+## The OPFS copy lives in a namespace, and everyone must agree on it
+
+`OPFS_NAMESPACE` in `lib/opfs-namespace.ts`, read by the read path, the
+importer, the OPFS helpers, the service worker and the harness. It was rooted
+at the origin, which made "discard the copy" a promise about the whole origin
+and shared that root with SQLite's own SAH-pool directory. If you add a sixth
+reader, take the constant — a literal copy is a silent bug.
+
+## Interface language is not the catalogue's language
+
+`lib/i18n` is eperx's own words; the toolbar dropdown is the disc's text, and
+is limited to whatever `-l` imported. They are independent, and a
+Polish-speaking desk reading an English-only tree is the normal case.
+
+i18next is there for **Polish plurals**: this interface counts things, and
+Polish needs one/few/many where English needs one/other. `i18n.test.ts` fails
+on a key missing from either catalogue, a counted string without its Polish
+forms, a placeholder present in one language only, and any static `t("…")`
+whose key does not exist. Its key pattern is word segments joined by single
+dots — a looser one matched the `t("...")` inside a doc comment.
+
+## Pure logic goes in a plain module
+
+`slots.ts`, `csv.ts`, `notes-format.ts`. A `.svelte.ts` module cannot be
+imported by a test without the Svelte compiler in the way, and the CSV quoting
+and the shapes an imported notes file may take are exactly what is worth
+testing. When something in a rune module turns out to have edge cases, move
+the edge cases out rather than reaching for a compiler in the test setup.
+
 ## Reading bytes is csfs's job, not ours
 
 eperx had its own storage layer — a `ByteSource` with `size()`/`read(pos, len)`,

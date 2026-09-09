@@ -189,18 +189,25 @@ with it, since that selection means nothing against a different tree.
 Two ways in.
 
 **By walking the catalogue.** Across the top: **Make**, **Model**,
-**Catalogue**, and the vehicle. Each is searchable — type to filter, since a
-marque can carry 104 catalogues and a catalogue up to 10,436 versions. Down
-the left: **Group** and **Subgroup**, as lists rather than dropdowns because
-they are short and they are what you move around in. The drawing and its
-numbered callout list fill the rest.
+**Catalogue**, the vehicle, and a **VIN** box. Each dropdown is searchable —
+type to filter, since a marque can carry 104 catalogues and a catalogue up to
+10,436 versions. Down the left: **Group** and **Subgroup**, as filterable
+lists rather than dropdowns because they are short and they are what you move
+around in; each header says how many there are. The drawing sits in the middle
+and its parts in their own column on the right.
 
 **By part number.** The search box in the top bar. It matches on a prefix, so
 `55189` finds `55189942`, and gives what the part is, every drawing it appears
 on, and what superseded it in both directions.
 
+Each parts row carries four actions: add to the bin, write a note, copy the
+part number, copy the description. Above the drawing are two more: copy the
+diagram to the clipboard as a PNG, and switch between fit-to-window and actual
+size.
+
 Clicking a search result selects that part; clicking a row in its where-used
-list jumps to that drawing. Above the diagram is a **variant strip** — one
+list jumps to that drawing. Search opens over the parts column rather than
+replacing the view, so the drawing and the rail stay where they were. Above the diagram is a **variant strip** — one
 entry per `DRAWINGS` row for the subgroup, each a different applicability —
 and clicking one switches to it.
 
@@ -238,9 +245,41 @@ always shown, because declining to answer must not look like an answer.
 Your make, model, catalogue and vehicle are remembered, so a reload puts you
 back where you were.
 
+## The parts bin
+
+The cart in the top bar, with a count. Adding a part twice means two of them
+rather than two lines, and each line records where it came from — catalogue,
+group, drawing, and the vehicle chosen at the time — because a pick list is
+acted on away from the screen. Export it as CSV (which a spreadsheet will open
+correctly, accents and all) or print it.
+
+## Notes on parts
+
+The sticky-note icon on any row. A note is attached to the **part number**, not
+to the drawing, so it follows that part everywhere it appears — which is the
+point: `55189942` is `PLUG` in the catalogue, and that it is the M14 one with
+the copper washer is knowledge the disc has nowhere to put.
+
+Notes live in this browser and nowhere else, so **back them up**: Settings →
+Interface → Export a backup writes one file with your notes, your bin, your
+language and where you were. Importing merges notes newest-first, so a
+colleague's file adds to yours rather than replacing it.
+
+## Installing it
+
+eperx is a PWA: your browser will offer to install it, and it then opens in its
+own window. The install is about 5.9 MB and includes the WebAssembly it needs,
+so with a tree in browser storage it works **entirely offline** — no host, no
+disc, no network.
+
 ## Settings
 
-The **gear** opens Settings. The **Data** tab is above. Elsewhere in the top
+The **gear** opens Settings, which has two tabs. **Data** is above.
+**Interface** holds the language eperx speaks — English or Polish, separately
+from the catalogue's own language — the light/dark/auto theme, and the backup
+export and import.
+
+The **Data** tab is above. Elsewhere in the top
 bar: the **eperx** wordmark opens About, the version beside it links to that
 release's notes, and there is a light/dark toggle. The language dropdown
 appears when the tree holds more than one.

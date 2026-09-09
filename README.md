@@ -27,6 +27,10 @@ until you supply some. Two of the three options need nothing but a folder:
 | **Stored in this browser**   | Copied into the origin private file system: opens on reload with no permission prompt and no disc mounted. Checked against the quota.                                                           |
 | **Import a disc**            | Build the tree in the browser from a mounted disc — no CLI at all. Chromium only, and it wants a desktop. See [Importing in the browser](#importing-in-the-browser).                            |
 
+A tree can also be opened straight from a link: `?data=<url>` points eperx at
+a hosted tree and remembers it, so a link handed to a colleague sets their
+source up rather than working once.
+
 The choice is remembered. HTTP and browser storage reopen silently; a saved
 folder may need one click, because browsers grant directory access per session.
 
@@ -52,6 +56,15 @@ page.
 - **Importing without the CLI.** The wizard in Settings → Data reads a mounted
   disc, converts the catalogue and writes the tree into browser storage. Same
   importer as the CLI, same output.
+- **A parts bin**, keyed by part number so adding one twice means two of them,
+  with its provenance recorded and a CSV a spreadsheet will open.
+- **Notes on part numbers** — what the disc has nowhere to put. Yours, kept in
+  this browser, and worth the backup that exports them.
+- **Copying**: the drawing to the clipboard as the PNG the shard gave it, and
+  any part number or description as text.
+- **Installable, and works offline.** 5.9 MB of shell including both
+  WebAssembly modules, so a tree in browser storage needs no network at all.
+- **English and Polish**, chosen separately from the catalogue's own language.
 - **`eperx` CLI** — `disc`, `tables`, `import`, `serve`, `browse`, `part`,
   `applicability`, `vin`, `f3`, `image`.
 
