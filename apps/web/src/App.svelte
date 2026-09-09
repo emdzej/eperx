@@ -1,5 +1,7 @@
 <script lang="ts">
   import About from "./components/About.svelte";
+  import NoteEditor from "./components/NoteEditor.svelte";
+  import PartsBin from "./components/PartsBin.svelte";
   import DrawingView from "./components/DrawingView.svelte";
   import PartResults from "./components/PartResults.svelte";
   import PartsPanel from "./components/PartsPanel.svelte";
@@ -7,6 +9,7 @@
   import SettingsDialog from "./components/SettingsDialog.svelte";
   import SpecStrip from "./components/SpecStrip.svelte";
   import Toolbar from "./components/Toolbar.svelte";
+  import { bin } from "./lib/bin.svelte";
   import { i18n } from "./lib/i18n/index.svelte";
   import {
     browse,
@@ -21,6 +24,8 @@
   import { connect, setLanguage, stats, tree } from "./lib/tree.svelte";
 
   let aboutOpen = $state(false);
+  /** The part whose note is being written, if any. */
+  let noteFor = $state<{ partNumber: string; name?: string } | undefined>(undefined);
   let settingsOpen = $state(false);
   /** Nothing chosen yet, so the settings panel opens as an unclosable prompt. */
   let firstRun = $state(false);
@@ -133,6 +138,7 @@
     onAbout={() => (aboutOpen = true)}
     onSettings={() => (settingsOpen = true)}
     onSearch={(q) => void search(q)}
+    onBin={() => (bin.open = true)}
   />
 
   {#if !tree.catalogue}
@@ -229,7 +235,7 @@
       {#if showingParts}
         <PartResults onClose={() => (browse.parts = [])} />
       {:else}
-        <PartsPanel />
+        <PartsPanel onNote={(partNumber, name) => (noteFor = { partNumber, name })} />
       {/if}
     </main>
 
@@ -262,6 +268,25 @@
 
   {#if aboutOpen}
     <About onClose={() => (aboutOpen = false)} />
+  {/if}
+
+  {#if bin.open}
+    <PartsBin onClose={() => (bin.open = false)} />
+  {/if}
+
+  <!--
+    Keyed on the part number, so opening a note for a different part remounts
+    the editor. Without the key Svelte reuses the component and the textarea
+    keeps the previous part's text — which reads as a saved note that is not.
+  -->
+  {#if noteFor}
+    {#key noteFor.partNumber}
+      <NoteEditor
+        partNumber={noteFor.partNumber}
+        name={noteFor.name}
+        onClose={() => (noteFor = undefined)}
+      />
+    {/key}
   {/if}
 
   {#if settingsOpen}

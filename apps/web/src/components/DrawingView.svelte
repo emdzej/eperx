@@ -11,10 +11,34 @@
   reading the drawing, so that strip sits with the image and not with the parts.
 -->
 <script lang="ts">
+  import Check from "@lucide/svelte/icons/check";
+  import Copy from "@lucide/svelte/icons/copy";
+  import Maximize2 from "@lucide/svelte/icons/maximize-2";
+  import Minimize2 from "@lucide/svelte/icons/minimize-2";
   import { browse, drawingKey, explainPattern, showDrawing } from "../lib/browse.svelte";
+  import { blobFromUrl, copyImage } from "../lib/clipboard";
   import { i18n } from "../lib/i18n/index.svelte";
 
   const t = $derived(i18n.t);
+
+  /** Cleared on a timer, so the tick is feedback rather than a new state. */
+  let copied = $state(false);
+  /** Full-bleed: the diagram at its own size, scrollable, no letterboxing. */
+  let actual = $state(false);
+
+  async function copyDrawing() {
+    if (!browse.imageUrl) return;
+    // The factory is passed unawaited — Safari needs the promise created
+    // inside the gesture. See `lib/clipboard.ts`.
+    copied = await copyImage(blobFromUrl(browse.imageUrl));
+    if (copied) setTimeout(() => (copied = false), 1500);
+  }
+
+  // A new drawing is a new thing to look at, so the zoom does not carry over.
+  $effect(() => {
+    void browse.drawing;
+    actual = false;
+  });
 
   // A drawing is hidden only when it *definitely* does not fit. "Unknown" is
   // always shown; see the note in `PartsPanel`.
@@ -89,12 +113,40 @@
       </div>
     {/if}
 
-    <div class="flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-auto p-3">
+    <div
+      class="relative flex min-h-0 min-w-0 flex-1 overflow-auto p-3 {actual
+        ? 'items-start justify-start'
+        : 'items-center justify-center'}"
+    >
       {#if browse.imageUrl}
+        <!--
+          The two buttons sit on the drawing rather than in a toolbar, because
+          they act on it and there is nowhere else they would obviously belong.
+        -->
+        <div class="absolute right-3 top-3 z-10 flex gap-1">
+          <button
+            class="rounded border border-divider bg-surface/90 p-1 text-muted backdrop-blur
+                   transition-colors hover:bg-elevated hover:text-foreground"
+            onclick={copyDrawing}
+            title={copied ? t("drawing.copied") : t("drawing.copy")}
+            aria-label={t("drawing.copy")}
+          >
+            {#if copied}<Check size={13} />{:else}<Copy size={13} />{/if}
+          </button>
+          <button
+            class="rounded border border-divider bg-surface/90 p-1 text-muted backdrop-blur
+                   transition-colors hover:bg-elevated hover:text-foreground"
+            onclick={() => (actual = !actual)}
+            title={actual ? t("drawing.shrink") : t("drawing.expand")}
+            aria-label={actual ? t("drawing.shrink") : t("drawing.expand")}
+          >
+            {#if actual}<Minimize2 size={13} />{:else}<Maximize2 size={13} />{/if}
+          </button>
+        </div>
         <img
           src={browse.imageUrl}
           alt={browse.drawing?.name ?? "drawing"}
-          class="max-h-full max-w-full object-contain"
+          class={actual ? "max-w-none" : "max-h-full max-w-full object-contain"}
         />
       {:else if browse.drawing}
         <p class="text-xs text-faint">{t("drawing.none")}</p>

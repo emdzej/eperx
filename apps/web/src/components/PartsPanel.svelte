@@ -12,14 +12,52 @@
   filtered table that looks complete is worse than one that admits it is not.
 -->
 <script lang="ts">
-  import {
-    browse,
-    calloutKey,
-    explainPattern,
-  } from "../lib/browse.svelte";
+  import Check from "@lucide/svelte/icons/check";
+  import Copy from "@lucide/svelte/icons/copy";
+  import ShoppingCart from "@lucide/svelte/icons/shopping-cart";
+  import StickyNote from "@lucide/svelte/icons/sticky-note";
+  import { browse, calloutKey, explainPattern } from "../lib/browse.svelte";
+  import { bin } from "../lib/bin.svelte";
+  import { copyText } from "../lib/clipboard";
   import { i18n } from "../lib/i18n/index.svelte";
+  import { notes } from "../lib/notes.svelte";
+  import { specificationLabel } from "../lib/browse.svelte";
+
+  let { onNote }: { onNote: (partNumber: string, name?: string) => void } = $props();
 
   const t = $derived(i18n.t);
+
+  /** Which cell was just copied, so the tick lands on that one and not all. */
+  let copied = $state("");
+
+  async function copy(key: string, value: string) {
+    copied = (await copyText(value)) ? key : "";
+    if (copied) setTimeout(() => (copied = ""), 1200);
+  }
+
+  /**
+   * Add a callout to the bin, with where it was found.
+   *
+   * The provenance is recorded at the moment of adding rather than looked up
+   * later: a pick list is acted on away from the screen, and "which drawing
+   * was this?" is the question it has to answer on its own.
+   */
+  function addToBin(item: { reference: number; part: string; name: string | null; quantity: string | null }) {
+    const quantity = Number(item.quantity);
+    bin.add({
+      partNumber: item.part,
+      reference: String(item.reference),
+      name: item.name ?? undefined,
+      // A callout's quantity is what the drawing calls for; a non-numeric or
+      // absent one means "one of them" rather than none.
+      quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : 1,
+      catalogue: browse.catalogue?.code,
+      catalogueName: browse.catalogue?.name,
+      group: browse.drawing ? `${browse.drawing.group}/${browse.drawing.subgroup}` : undefined,
+      drawing: browse.drawing ? `${browse.drawing.table} v${browse.drawing.variant}` : undefined,
+      vehicle: specificationLabel(),
+    });
+  }
 
   /**
    * Filtering, and its one rule.
@@ -75,7 +113,8 @@
             <th class="px-2 py-1 text-left font-normal">{t("parts.part")}</th>
             <th class="px-2 py-1 text-left font-normal">{t("parts.description")}</th>
             <th class="w-12 px-2 py-1 text-right font-normal">{t("parts.quantity")}</th>
-            <th class="w-32 px-3 py-1 text-left font-normal">{t("parts.applies")}</th>
+            <th class="w-24 px-2 py-1 text-left font-normal">{t("parts.applies")}</th>
+            <th class="w-20 px-2 py-1"><span class="sr-only">{t("bin.title")}</span></th>
           </tr>
         </thead>
         <tbody>
@@ -87,11 +126,27 @@
                     >.{item.sequence}</span
                   >{/if}
               </td>
-              <td class="whitespace-nowrap px-2 py-1 font-mono text-foreground">{item.part}</td>
+              <td class="whitespace-nowrap px-2 py-1 font-mono text-foreground">
+                {item.part}
+                {#if bin.has(item.part)}
+                  <span
+                    class="ml-1 font-mono text-[10px] text-accent"
+                    title={t("bin.inBin", { count: bin.quantityOf(item.part) })}
+                  >
+                    ×{bin.quantityOf(item.part)}
+                  </span>
+                {/if}
+              </td>
               <td class="px-2 py-1 text-muted">
                 {item.name ?? ""}
                 {#if item.qualifier}<span class="text-faint">{item.qualifier}</span>{/if}
                 {#if item.note}<span class="block text-[10px] text-faint">{item.note}</span>{/if}
+                <!-- Shown, not hidden behind the icon. A note is knowledge the
+                     catalogue does not have; making it hoverable would be
+                     hiding the most useful line on the row. -->
+                {#if notes.get(item.part)}
+                  <span class="block text-[10px] italic text-accent">{notes.get(item.part)}</span>
+                {/if}
               </td>
               <td class="px-2 py-1 text-right font-mono text-muted">{item.quantity ?? ""}</td>
               <td
@@ -107,10 +162,65 @@
                   class="break-all">{item.formula ?? ""}</span
                 >
               </td>
+              <!--
+                The actions, on the row rather than behind a menu: each is one
+                click on the thing it acts on, and a parts desk does all three
+                constantly.
+              -->
+              <td class="whitespace-nowrap px-2 py-1 text-right">
+                <button
+                  class="rounded p-0.5 text-faint transition-colors hover:bg-elevated
+                         hover:text-accent"
+                  onclick={() => addToBin(item)}
+                  title={t("bin.add", { part: item.part })}
+                  aria-label={t("bin.add", { part: item.part })}
+                >
+                  <ShoppingCart size={12} />
+                </button>
+                <button
+                  class="rounded p-0.5 transition-colors hover:bg-elevated hover:text-foreground
+                         {notes.get(item.part) ? 'text-accent' : 'text-faint'}"
+                  onclick={() => onNote(item.part, item.name ?? undefined)}
+                  title={notes.get(item.part) ?? t("note.edit")}
+                  aria-label={t("note.edit")}
+                >
+                  <StickyNote size={12} />
+                </button>
+                <button
+                  class="rounded p-0.5 text-faint transition-colors hover:bg-elevated
+                         hover:text-foreground"
+                  onclick={() => copy(`p-${calloutKey(item)}`, item.part)}
+                  title={t("parts.copyPart")}
+                  aria-label={t("parts.copyPart")}
+                >
+                  {#if copied === `p-${calloutKey(item)}`}
+                    <Check size={12} />
+                  {:else}
+                    <Copy size={12} />
+                  {/if}
+                </button>
+                <button
+                  class="rounded p-0.5 text-faint transition-colors hover:bg-elevated
+                         hover:text-foreground"
+                  onclick={() =>
+                    copy(
+                      `n-${calloutKey(item)}`,
+                      [item.name, item.qualifier].filter(Boolean).join(" "),
+                    )}
+                  title={t("parts.copyName")}
+                  aria-label={t("parts.copyName")}
+                >
+                  {#if copied === `n-${calloutKey(item)}`}
+                    <Check size={12} />
+                  {:else}
+                    <span class="font-mono text-[9px]">Aa</span>
+                  {/if}
+                </button>
+              </td>
             </tr>
           {:else}
             <tr>
-              <td colspan="5" class="px-3 py-6 text-center text-[11px] text-faint">
+              <td colspan="6" class="px-3 py-6 text-center text-[11px] text-faint">
                 {browse.callouts.length ? t("parts.allFiltered") : t("parts.noCallouts")}
               </td>
             </tr>

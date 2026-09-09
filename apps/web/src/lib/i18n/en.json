@@ -5,6 +5,28 @@
     "chooseSource": "Choose a source",
     "notConnected": "The tree is not open."
   },
+  "bin": {
+    "title": "Parts bin",
+    "open": "Open the parts bin",
+    "add": "Add {{part}} to the bin",
+    "inBin": "{{count}} in the bin",
+    "lines_one": "{{count}} line",
+    "lines_other": "{{count}} lines",
+    "pieces_one": "{{count}} piece",
+    "pieces_other": "{{count}} pieces",
+    "empty": "Nothing in the bin yet. Add parts from a drawing.",
+    "quantity": "Qty",
+    "remove": "Remove from the bin",
+    "clear": "Empty the bin",
+    "csv": "Download CSV",
+    "print": "Print",
+    "close": "Close",
+    "part": "Part",
+    "name": "Description",
+    "from": "From",
+    "note": "Note",
+    "file": "eperx-parts.csv"
+  },
   "drawing": {
     "none": "No image for this drawing.",
     "pickSubgroup": "Pick a subgroup.",
@@ -31,6 +53,24 @@
     "auto": "Automatic",
     "en": "English",
     "pl": "Polski"
+  },
+  "note": {
+    "title": "Note on {{part}}",
+    "placeholder": "What you know about this part",
+    "save": "Save",
+    "cancel": "Cancel",
+    "remove": "Remove the note",
+    "edit": "Write a note",
+    "has": "Note: {{text}}",
+    "remaining": "{{count}} characters left",
+    "export": "Export notes",
+    "import": "Import notes",
+    "imported": "Imported: {{added}} new, {{updated}} updated, {{kept}} kept.",
+    "importFailed": "That file held no notes eperx could read.",
+    "count_one": "{{count}} note",
+    "count_other": "{{count}} notes",
+    "file": "eperx-notes.json",
+    "none": "No notes yet."
   },
   "parts": {
     "title": "Parts",

@@ -18,6 +18,8 @@
 <script lang="ts">
   import Cog from "@lucide/svelte/icons/cog";
   import Search from "@lucide/svelte/icons/search";
+  import ShoppingCart from "@lucide/svelte/icons/shopping-cart";
+  import { bin } from "../lib/bin.svelte";
   import Combobox from "./Combobox.svelte";
   import ThemeToggle from "./ThemeToggle.svelte";
   import GithubMark from "./GithubMark.svelte";
@@ -38,9 +40,10 @@
     onAbout: () => void;
     onSettings: () => void;
     onSearch: (query: string) => void;
+    onBin: () => void;
   }
 
-  let { onAbout, onSettings, onSearch }: Props = $props();
+  let { onAbout, onSettings, onSearch, onBin }: Props = $props();
 
   const t = $derived(i18n.t);
 
@@ -274,6 +277,29 @@
   {/if}
 
   <div class="flex shrink-0 items-center gap-0.5 pb-0.5">
+    <!--
+      The count is the point of having the bin in the bar: a bin you have
+      forgotten about is worse than no bin. It reads as a number rather than a
+      dot, because "how many lines" is the thing being tracked.
+    -->
+    <button
+      class="relative rounded px-2 py-1 transition-colors hover:bg-elevated
+             hover:text-foreground {bin.count > 0 ? 'text-accent' : 'text-muted'}"
+      onclick={onBin}
+      title={t("bin.open")}
+      aria-label={t("bin.open")}
+    >
+      <ShoppingCart size={15} />
+      {#if bin.count > 0}
+        <span
+          class="absolute -right-0.5 -top-0.5 rounded-full bg-accent px-1 font-mono text-[9px]
+                 leading-tight text-flag-white"
+        >
+          {bin.count}
+        </span>
+      {/if}
+      <span class="sr-only">{t("bin.inBin", { count: bin.count })}</span>
+    </button>
     <ThemeToggle />
     <button
       class="rounded px-2 py-1 text-muted transition-colors hover:bg-elevated
