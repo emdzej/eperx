@@ -19,7 +19,7 @@
     "clean": "rm -rf dist .turbo *.tsbuildinfo"
   },
   "dependencies": {
-    "@emdzej/csfs-core": "^0.1.0",
+    "@emdzej/csfs-core": "^0.1.1",
     "@eperx/core": "workspace:*",
     "bz2": "^1.0.1"
   },

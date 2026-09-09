@@ -12,10 +12,10 @@
     "typecheck": "svelte-check --tsconfig ./tsconfig.json"
   },
   "dependencies": {
-    "@emdzej/csfs-core": "^0.1.0",
-    "@emdzej/csfs-fsa": "^0.1.0",
-    "@emdzej/csfs-http": "^0.1.0",
-    "@emdzej/csfs-opfs": "^0.1.0",
+    "@emdzej/csfs-core": "^0.1.1",
+    "@emdzej/csfs-fsa": "^0.1.1",
+    "@emdzej/csfs-http": "^0.1.1",
+    "@emdzej/csfs-opfs": "^0.1.1",
     "@eperx/catalogue": "workspace:*",
     "@eperx/core": "workspace:*",
     "@eperx/importer": "workspace:*",

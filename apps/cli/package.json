@@ -15,9 +15,9 @@
   },
   "dependencies": {
     "@commander-js/extra-typings": "^15.0.0",
-    "@emdzej/csfs-core": "^0.1.0",
-    "@emdzej/csfs-manifest": "^0.1.0",
-    "@emdzej/csfs-node": "^0.1.0",
+    "@emdzej/csfs-core": "^0.1.1",
+    "@emdzej/csfs-manifest": "^0.1.1",
+    "@emdzej/csfs-node": "^0.1.1",
     "@eperx/catalogue": "workspace:*",
     "@eperx/core": "workspace:*",
     "@eperx/importer": "workspace:*",

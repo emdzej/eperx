@@ -187,9 +187,20 @@ export default defineConfig({
       injectRegister: null,
       registerType: "autoUpdate",
       injectManifest: {
-        // The shell only. A tree is never a build artifact; the icons and the
-        // index are.
-        globPatterns: ["**/*.{js,css,html,png,svg,webmanifest}"],
+        /*
+         * The shell only — a tree is never a build artifact.
+         *
+         * `.wasm` is in the list deliberately, and it is most of the weight:
+         * 3.6 MB of SQLite for reading and 864 kB for the importer. Without
+         * them "offline" would mean the app launches and cannot read
+         * anything, which is worse than no offline at all. So the install is
+         * about 5.9 MB and eperx works with the network off, importer
+         * included.
+         */
+        globPatterns: ["**/*.{js,css,html,png,svg,wasm,webmanifest}"],
+        // Two of those files are over the default 2 MiB ceiling and would be
+        // silently dropped from the precache.
+        maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
         /*
          * A classic worker, not an ES module: module workers are still absent
          * from Firefox, and this one imports nothing, so the module format
