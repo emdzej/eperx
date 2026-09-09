@@ -128,13 +128,43 @@ function savedVehicle(): SavedVehicle | undefined {
   return undefined;
 }
 
+/**
+ * Something thrown, as a sentence.
+ *
+ * `String(error)` gives `[object Object]` for anything that is not an `Error`,
+ * and that is exactly what reached the footer when SQLite failed: the WASM
+ * binding rejects with a plain object carrying `result.message`, so the user
+ * was told `[object Object]` about a corrupt database. Every shape that has
+ * turned up is tried before falling back.
+ */
+function describe(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  if (error && typeof error === "object") {
+    const bag = error as {
+      message?: unknown;
+      result?: { message?: unknown };
+      toString?: () => string;
+    };
+    if (typeof bag.message === "string" && bag.message) return bag.message;
+    if (typeof bag.result?.message === "string" && bag.result.message) return bag.result.message;
+    try {
+      const json = JSON.stringify(error);
+      if (json && json !== "{}") return json;
+    } catch {
+      // Circular. Fall through to the last resort.
+    }
+  }
+  return String(error);
+}
+
 async function run(work: () => Promise<void>): Promise<void> {
   browse.busy = true;
   browse.error = undefined;
   try {
     await work();
   } catch (error) {
-    browse.error = error instanceof Error ? error.message : String(error);
+    browse.error = describe(error);
   } finally {
     browse.busy = false;
   }

@@ -1,4 +1,5 @@
 import type { MountKind } from "./mount";
+import { putTreeHandle, readTreeHandle } from "./tree-handle";
 
 /**
  * What the app remembers between visits.
@@ -21,9 +22,6 @@ import type { MountKind } from "./mount";
  */
 
 const KEY = "eperx.data";
-const DB_NAME = "eperx";
-const STORE = "handles";
-const HANDLE_KEY = "tree";
 
 export interface DataSettings {
   kind: MountKind;
@@ -48,41 +46,6 @@ export interface Resumable {
   permission: "granted" | "prompt" | "denied" | "missing";
 }
 
-function openDb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1);
-    request.onupgradeneeded = () => {
-      request.result.createObjectStore(STORE);
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-async function putHandle(handle: FileSystemDirectoryHandle | undefined): Promise<void> {
-  const db = await openDb();
-  await new Promise<void>((resolve, reject) => {
-    const tx = db.transaction(STORE, "readwrite");
-    const store = tx.objectStore(STORE);
-    if (handle) store.put(handle, HANDLE_KEY);
-    else store.delete(HANDLE_KEY);
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
-  db.close();
-}
-
-async function getHandle(): Promise<FileSystemDirectoryHandle | undefined> {
-  const db = await openDb();
-  const handle = await new Promise<FileSystemDirectoryHandle | undefined>((resolve, reject) => {
-    const request = db.transaction(STORE, "readonly").objectStore(STORE).get(HANDLE_KEY);
-    request.onsuccess = () => resolve(request.result as FileSystemDirectoryHandle | undefined);
-    request.onerror = () => reject(request.error);
-  });
-  db.close();
-  return handle;
-}
-
 /** Remember a choice. The handle is only stored for `directory`. */
 export async function saveSettings(
   settings: DataSettings,
@@ -92,13 +55,13 @@ export async function saveSettings(
     KEY,
     JSON.stringify({ ...settings, savedAt: new Date().toISOString() } satisfies DataSettings),
   );
-  if (settings.kind === "directory") await putHandle(handle);
+  if (settings.kind === "directory") await putTreeHandle(handle);
 }
 
 /** Forget everything, including the folder handle. */
 export async function clearSettings(): Promise<void> {
   localStorage.removeItem(KEY);
-  await putHandle(undefined);
+  await putTreeHandle(undefined);
 }
 
 /** The stored choice, without touching IndexedDB. */
@@ -135,7 +98,7 @@ export async function readSettings(): Promise<Resumable> {
 
   let handle: FileSystemDirectoryHandle | undefined;
   try {
-    handle = await getHandle();
+    handle = await readTreeHandle();
   } catch {
     handle = undefined;
   }

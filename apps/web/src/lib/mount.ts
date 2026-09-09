@@ -172,6 +172,22 @@ export async function pickDirectory(): Promise<FileSystemDirectoryHandle> {
 }
 
 /**
+ * What was last mounted, so it can be posted again.
+ *
+ * A new worker version claims the page the moment it activates, and its mount
+ * map starts empty — so the page has to say again what it had open. The worker
+ * can also recover a folder from IndexedDB by itself; this is the other half,
+ * and it covers the OPFS case and the moment before the read is retried.
+ */
+let mounted: { kind: MountKind; handle?: FileSystemDirectoryHandle } | undefined;
+
+if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (mounted) void postMount(mounted.kind, mounted.handle).catch(() => {});
+  });
+}
+
+/**
  * Mount a source and return the base URL to read it through.
  *
  * `remote` needs no worker at all, which keeps the plain HTTP case free of
@@ -185,6 +201,7 @@ export async function mount(
 
   await ensureWorker();
   await postMount(kind, options.handle);
+  mounted = { kind, handle: options.handle };
   return `${PREFIX}/${kind}`;
 }
 

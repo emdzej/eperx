@@ -1,5 +1,6 @@
 /// <reference lib="webworker" />
 import { opfsRoot } from "./lib/opfs-namespace";
+import { readTreeHandle } from "./lib/tree-handle";
 
 export {};
 
@@ -52,7 +53,15 @@ const sw = self as unknown as ServiceWorkerGlobalScope;
  */
 const PREFIX = new URL("__eperx/", sw.registration.scope).pathname;
 
-/** Mount name → FileSystemDirectoryHandle. */
+/**
+ * Mount name → `FileSystemDirectoryHandle`, as the page most recently posted.
+ *
+ * **In memory, and a service worker's memory does not last.** The browser may
+ * stop and restart this worker whenever it likes, and a new version claims the
+ * page as soon as it activates — either way this map comes back empty while
+ * the page carries on believing it is mounted. `resolve` therefore falls back
+ * to IndexedDB rather than trusting it.
+ */
 const mounts = new Map();
 
 /** Resolved file handles, keyed `mount:path`. Directory walks are not free. */
@@ -270,7 +279,21 @@ async function resolve(mount: string, path: string): Promise<File | undefined> {
   const cached = handles.get(cacheKey);
   if (cached) return cached.getFile();
 
-  const root = mount === "opfs" ? await opfsRoot() : mounts.get(mount);
+  let root = mount === "opfs" ? await opfsRoot() : mounts.get(mount);
+
+  /*
+   * A picked folder, recovered from where the settings panel put it.
+   *
+   * This is the difference between a working tree and `SQLITE_CORRUPT`. When
+   * the map was empty this threw, `serve` answered `404`, and SQLite read that
+   * as the contents of a 4 kB page — reporting corruption on whichever query
+   * happened to touch it rather than "the file went away".
+   */
+  if (!root && mount === "directory") {
+    root = await readTreeHandle();
+    if (root) mounts.set(mount, root);
+  }
+
   if (!root) throw new Error(`${mount} is not mounted`);
 
   const segments = path.split("/").filter(Boolean);

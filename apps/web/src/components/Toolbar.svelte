@@ -117,8 +117,18 @@
   }
 </script>
 
+<!--
+  Wrapping, not shrinking.
+  
+  These are labelled groups of a fixed size, so when the window is too narrow
+  for them they move onto another line rather than compressing — a squashed
+  group puts `CATALOGUE` on top of `VEHICLE`, which is what happened before.
+  Every group is therefore `shrink-0`, and only the catalogue flexes, with a
+  floor. `gap-y` is what makes the second row breathe.
+-->
 <header
-  class="flex shrink-0 items-end gap-3 border-b border-divider bg-surface px-3 py-1.5"
+  class="flex shrink-0 flex-wrap items-end gap-x-3 gap-y-1.5 border-b border-divider
+         bg-surface px-3 py-1.5"
 >
   <!--
     Wordmark, version, repository. The version is a build-time literal from the
@@ -158,7 +168,7 @@
   </div>
 
   {#if tree.catalogue}
-    <div class="flex min-w-0 flex-col gap-0.5">
+    <div class="flex shrink-0 flex-col gap-0.5">
       <span class="text-[10px] uppercase tracking-wide text-faint">{t("toolbar.make")}</span>
       <Combobox
         items={makes}
@@ -172,7 +182,7 @@
       />
     </div>
 
-    <div class="flex min-w-0 flex-col gap-0.5">
+    <div class="flex shrink-0 flex-col gap-0.5">
       <span class="text-[10px] uppercase tracking-wide text-faint">{t("toolbar.model")}</span>
       <Combobox
         items={models}
@@ -187,7 +197,10 @@
       />
     </div>
 
-    <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+    <!-- The only one that flexes: catalogue names are long and it is the one
+         worth giving the slack to. The floor stops it collapsing under its
+         own label. -->
+    <div class="flex min-w-[16rem] flex-1 flex-col gap-0.5">
       <span class="text-[10px] uppercase tracking-wide text-faint">{t("toolbar.catalogue")}</span>
       <Combobox
         items={catalogues}
@@ -201,7 +214,7 @@
       />
     </div>
 
-    <div class="flex min-w-0 flex-col gap-0.5">
+    <div class="flex shrink-0 flex-col gap-0.5">
       <span class="text-[10px] uppercase tracking-wide text-faint">{t("toolbar.vehicle")}</span>
       <Combobox
         items={versions}
@@ -245,8 +258,15 @@
       </div>
     </div>
 
-    <div class="flex shrink-0 items-center gap-1 pb-0.5">
-      <div class="flex">
+    <!--
+      Labelled like its neighbours rather than floated beside them. It used to
+      carry `pb-0.5`, which lifted it two pixels above every other control on
+      the row — visible, and the kind of thing that reads as sloppiness.
+    -->
+    <div class="flex shrink-0 flex-col gap-0.5">
+      <span class="text-[10px] uppercase tracking-wide text-faint">{t("toolbar.search")}</span>
+      <div class="flex items-center gap-1">
+        <div class="flex">
         <input
           class="w-36 rounded-l border border-divider bg-base px-2 py-1 font-mono text-[11px]
                  outline-none focus:border-accent"
@@ -266,6 +286,7 @@
         </button>
       </div>
 
+      </div>
       {#if tree.languages.length > 1}
         <select
           class="rounded border border-divider bg-base px-1 py-1 text-[11px] text-muted
@@ -281,11 +302,11 @@
         </select>
       {/if}
     </div>
-  {:else}
-    <div class="flex-1"></div>
   {/if}
 
-  <div class="flex shrink-0 items-center gap-0.5 pb-0.5">
+  <!-- `ml-auto` rather than a spacer: with wrapping, a spacer div would
+       become a row of its own. -->
+  <div class="ml-auto flex shrink-0 items-center gap-0.5 pb-0.5">
     <!--
       The count is the point of having the bin in the bar: a bin you have
       forgotten about is worse than no bin. It reads as a number rather than a
