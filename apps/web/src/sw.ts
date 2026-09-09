@@ -1,3 +1,20 @@
+/// <reference lib="webworker" />
+export {};
+
+declare global {
+  /**
+   * The plugin's injection point. Declared as a global rather than by
+   * redeclaring `self`, which `lib.webworker` already owns.
+   */
+  var __WB_MANIFEST: { url: string; revision: string | null }[];
+}
+
+/**
+ * `self`, as what it actually is: `lib.webworker` types it as a
+ * `WorkerGlobalScope`, which has no `registration`, `clients` or
+ * `skipWaiting`.
+ */
+const sw = self as unknown as ServiceWorkerGlobalScope;
 /*
  * eperx local data service worker.
  *
@@ -31,7 +48,7 @@
  * fetch fell through to the network on a prefixed deploy — a 404 that reads
  * as a missing file.
  */
-const PREFIX = new URL("__eperx/", self.registration.scope).pathname;
+const PREFIX = new URL("__eperx/", sw.registration.scope).pathname;
 
 /** Mount name → FileSystemDirectoryHandle. */
 const mounts = new Map();
@@ -39,17 +56,32 @@ const mounts = new Map();
 /** Resolved file handles, keyed `mount:path`. Directory walks are not free. */
 const handles = new Map();
 
-self.addEventListener("install", () => {
-  // Take over straight away: a page that registered the worker must not have
-  // to reload before its own fetches are intercepted.
-  self.skipWaiting();
+sw.addEventListener("install", (event) => {
+  event.waitUntil(
+    (async () => {
+      const cache = await caches.open(CACHE);
+      await cache.addAll([...SHELL]);
+      // Take over straight away: a page that registered the worker must not
+      // have to reload before its own fetches are intercepted. There is no
+      // half-updated state to protect — the shell holds no data, and a tree is
+      // opened fresh on every load.
+      await sw.skipWaiting();
+    })(),
+  );
 });
 
-self.addEventListener("activate", (event) => {
-  event.waitUntil(self.clients.claim());
+sw.addEventListener("activate", (event) => {
+  event.waitUntil(
+    (async () => {
+      for (const name of await caches.keys()) {
+        if (name !== CACHE && name.startsWith("eperx-shell-")) await caches.delete(name);
+      }
+      await sw.clients.claim();
+    })(),
+  );
 });
 
-self.addEventListener("message", (event) => {
+sw.addEventListener("message", (event) => {
   const message = event.data;
   if (!message || typeof message !== "object") return;
 
@@ -68,13 +100,94 @@ self.addEventListener("message", (event) => {
   }
 });
 
-self.addEventListener("fetch", (event) => {
-  const url = new URL(event.request.url);
-  if (url.origin !== self.location.origin || !url.pathname.startsWith(PREFIX)) return;
-  event.respondWith(serve(event.request, url));
+/*
+ * The second job: the app shell, so eperx opens with no network.
+ *
+ * Adding this to the *same* worker is not a choice — there is one worker per
+ * scope, and this one already exists to serve local files. That makes the
+ * ordering below load-bearing rather than tidy.
+ *
+ * **A cached `200` must never answer a `Range` request.** Every read of
+ * `catalogue.sqlite` is "4 kB at this offset", and a worker that answered one
+ * with a whole cached file would return the wrong bytes at every offset while
+ * SQLite decoded plausible garbage and reported nothing. So: `/__eperx/` is
+ * handled first and answers its own `206`; then ranges bail outright; and only
+ * then is a *whitelist* of precached shell URLs consulted. A
+ * "cache-first, network-fallback" default would eventually make exactly that
+ * mistake.
+ */
+
+/** Bumped by the build, so a new release replaces the shell wholesale. */
+const CACHE = `eperx-shell-${__APP_VERSION__}`;
+
+/**
+ * The shell, as absolute URLs — which is what `cache.match` compares against.
+ *
+ * `self.__WB_MANIFEST` is the injection point and the spelling is not
+ * negotiable: the plugin scans the source for that literal and refuses the
+ * build without it.
+ */
+const SHELL = new Set(
+  self.__WB_MANIFEST.map((entry) => new URL(entry.url, self.location.href).href),
+);
+
+const INDEX = new URL("index.html", sw.registration.scope).href;
+
+sw.addEventListener("fetch", (event) => {
+  const request = event.request;
+  const url = new URL(request.url);
+
+  // Local data, first and always. This is the reason the worker exists, and it
+  // answers ranges itself.
+  if (url.origin === self.location.origin && url.pathname.startsWith(PREFIX)) {
+    event.respondWith(serve(request, url));
+    return;
+  }
+
+  if (request.method !== "GET") return;
+
+  /*
+   * A ranged read belongs to whoever asked for it. Redundant given the
+   * whitelist below — no shell file is ever fetched with a `Range` — and it
+   * stays because it is the one mistake that would be silent. See above.
+   */
+  if (request.headers.has("range")) return;
+
+  /*
+   * A navigation is answered from the cached index so the app opens offline.
+   * `index.html` rather than the requested URL, because the client is one page
+   * and every path within it resolves to that document.
+   */
+  if (request.mode === "navigate") {
+    event.respondWith(
+      (async () => {
+        const cached = await caches.match(INDEX, { cacheName: CACHE });
+        return cached ?? fetch(request);
+      })(),
+    );
+    return;
+  }
+
+  // Everything else is left alone unless it is part of the shell.
+  if (!SHELL.has(url.href)) return;
+
+  event.respondWith(
+    (async () => {
+      const cached = await caches.match(url.href, { cacheName: CACHE });
+      if (cached) return cached;
+      // Missing from the cache means a partial install: fetch it and put it
+      // back rather than failing the load.
+      const response = await fetch(request);
+      if (response.ok) {
+        const cache = await caches.open(CACHE);
+        await cache.put(url.href, response.clone());
+      }
+      return response;
+    })(),
+  );
 });
 
-async function serve(request, url) {
+async function serve(request: Request, url: URL): Promise<Response> {
   const rest = url.pathname.slice(PREFIX.length);
   const slash = rest.indexOf("/");
   if (slash <= 0) return new Response("bad mount path", { status: 400 });
@@ -150,7 +263,7 @@ async function serve(request, url) {
 }
 
 /** Resolve `path` inside a mount to a `File`. */
-async function resolve(mount, path) {
+async function resolve(mount: string, path: string): Promise<File | undefined> {
   const cacheKey = `${mount}:${path}`;
   const cached = handles.get(cacheKey);
   if (cached) return cached.getFile();
@@ -171,7 +284,7 @@ async function resolve(mount, path) {
   return handle.getFile();
 }
 
-function contentType(path) {
+function contentType(path: string): string {
   if (path.endsWith(".json")) return "application/json";
   if (path.endsWith(".png")) return "image/png";
   return "application/octet-stream";

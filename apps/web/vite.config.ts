@@ -3,6 +3,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
+import { VitePWA } from "vite-plugin-pwa";
 import { defineConfig, type Plugin, type ViteDevServer, type PreviewServer } from "vite";
 
 /**
@@ -164,7 +165,43 @@ export default defineConfig({
     __REPO_URL__: JSON.stringify(REPO_URL),
   },
 
-  plugins: [svelte(), dataTree(process.env["EPERX_DATA"])],
+  plugins: [
+    svelte(),
+    dataTree(process.env["EPERX_DATA"]),
+    /*
+     * `injectManifest`, not `generateSW`.
+     *
+     * eperx's worker is written out by hand in `src/sw.ts` because it has a
+     * second, older job: serving a picked folder or the origin private
+     * filesystem to SQLite over `Range`. A generated worker with a
+     * runtime-caching config could not be trusted next to that — see the note
+     * at the top of `sw.ts`. All the plugin does here is hand it the list of
+     * built shell files.
+     */
+    VitePWA({
+      strategies: "injectManifest",
+      srcDir: "src",
+      filename: "sw.ts",
+      // Registered by hand in `main.ts`, so a failure is visible in the
+      // console rather than swallowed.
+      injectRegister: null,
+      registerType: "autoUpdate",
+      injectManifest: {
+        // The shell only. A tree is never a build artifact; the icons and the
+        // index are.
+        globPatterns: ["**/*.{js,css,html,png,svg,webmanifest}"],
+        /*
+         * A classic worker, not an ES module: module workers are still absent
+         * from Firefox, and this one imports nothing, so the module format
+         * costs that browser the whole feature and buys nothing.
+         */
+        rollupFormat: "iife",
+      },
+      // Development serves the real files; a cached shell there means editing
+      // one and being served the previous one.
+      devOptions: { enabled: false },
+    }),
+  ],
 
   // Vite's dependency pre-bundler rewrites `sqlite-wasm-http` in dev and its
   // worker then loads as `?worker_file&type=classic`, which fails outright

@@ -52,7 +52,39 @@ export async function capabilities(): Promise<Capabilities> {
 let registration: ServiceWorkerRegistration | undefined;
 
 /**
- * Register the worker and wait until it controls this page.
+ * Register the worker.
+ *
+ * Called once at startup from `main.ts`, because the worker carries the app
+ * shell as well as local data — so it has to be installed whether or not
+ * anyone opens a folder. Registering is all this does; waiting for it to take
+ * control is {@link ensureWorker}, which only a local mount needs.
+ *
+ * Never throws. A browser with no service workers, or a registration the
+ * browser refuses, still reads a tree over HTTP perfectly well.
+ */
+export async function registerWorker(): Promise<void> {
+  if (!("serviceWorker" in navigator)) return;
+  /*
+   * Not in development. The plugin does not build a worker there, so there is
+   * nothing to register — and a cached shell in dev means editing a file and
+   * being served the previous one. `ensureWorker` still registers on demand,
+   * which is what a local mount needs and what dev used to do anyway.
+   */
+  if (import.meta.env.DEV) return;
+  try {
+    registration ??= await navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`, {
+      scope: import.meta.env.BASE_URL,
+    });
+    await registration.update().catch(() => {
+      // An update check failing is not a reason to refuse to run.
+    });
+  } catch (cause) {
+    console.warn("eperx: the service worker did not register", cause);
+  }
+}
+
+/**
+ * Wait until the worker controls this page.
  *
  * Both waits matter. A freshly installed worker does not control the page that
  * registered it until it activates and claims clients, and a fetch issued
@@ -64,6 +96,11 @@ export async function ensureWorker(): Promise<void> {
     throw new Error("This browser has no service workers, so local data cannot be served.");
   }
 
+  /*
+   * Registered at startup in production, but not in development and possibly
+   * not yet — a mount can be asked for before that resolves. So this registers
+   * for itself rather than assuming.
+   */
   registration ??= await navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`, {
     scope: import.meta.env.BASE_URL,
   });
