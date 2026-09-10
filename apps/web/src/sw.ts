@@ -198,15 +198,39 @@ sw.addEventListener("fetch", (event) => {
   if (request.headers.has("range")) return;
 
   /*
-   * A navigation is answered from the cached index so the app opens offline.
+   * A navigation goes to the network first, and falls back to the cached
+   * index.
+   *
+   * Cache-first here is the obvious choice and it is wrong. `index.html` is
+   * the one shell file with no content hash in its name, and it is what names
+   * the hashed bundle — so answering it from cache means a reload after a
+   * deploy serves the *old* app, and only the reload after that gets the new
+   * one. That double-reload cost real confusion: a fix would land, be
+   * reloaded, and appear not to have worked.
+   *
+   * Network-first costs one request for about a kilobyte, which is nothing
+   * against being wrong about which version is running. Offline still works,
+   * because that request failing is exactly when the fallback applies.
+   *
    * `index.html` rather than the requested URL, because the client is one page
    * and every path within it resolves to that document.
    */
   if (request.mode === "navigate") {
     event.respondWith(
       (async () => {
+        try {
+          const response = await fetch(request);
+          if (response.ok) {
+            // Keep the fallback current while we are here.
+            const cache = await caches.open(CACHE);
+            await cache.put(INDEX, response.clone());
+            return response;
+          }
+        } catch {
+          // Offline, or the host is down. That is what the cache is for.
+        }
         const cached = await caches.match(INDEX, { cacheName: CACHE });
-        return cached ?? fetch(request);
+        return cached ?? Response.error();
       })(),
     );
     return;
