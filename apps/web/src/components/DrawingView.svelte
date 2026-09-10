@@ -5,10 +5,8 @@
   (`PartsPanel`), because a callout list is read *against* the image and the
   two belong side by side rather than stacked with the table clipped.
 
-  What stays is the diagram, the variant strip, and one footer line naming what
-  is on screen. A subgroup can hold several `DRAWINGS` rows for the same table
-  — each a different applicability — and choosing between them is part of
-  reading the drawing, so that strip sits with the image and not with the parts.
+  What stays is the diagram, its variants as a tab strip, and one footer line
+  naming what is on screen.
 -->
 <script lang="ts">
   import Check from "@lucide/svelte/icons/check";
@@ -40,6 +38,42 @@
     actual = false;
   });
 
+  /**
+   * Drag to pan, once the drawing is bigger than its frame.
+   *
+   * `overflow-auto` gives scrollbars and nothing else, and a scrollbar is not
+   * how anyone moves around a drawing — you push the paper. So the pointer
+   * drags the scroll offsets directly.
+   *
+   * `setPointerCapture` is what makes it survive the pointer leaving the
+   * element mid-drag, which happens constantly when you fling it; without it
+   * the drag sticks and the diagram keeps following the mouse.
+   */
+  let frame = $state<HTMLDivElement | undefined>();
+  let dragging = $state(false);
+  let from = { x: 0, y: 0, left: 0, top: 0 };
+
+  function grab(event: PointerEvent) {
+    if (!actual || !frame) return;
+    // Primary button only: a middle-click drag is the browser's own scroll.
+    if (event.button !== 0) return;
+    dragging = true;
+    from = { x: event.clientX, y: event.clientY, left: frame.scrollLeft, top: frame.scrollTop };
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+  }
+
+  function drag(event: PointerEvent) {
+    if (!dragging || !frame) return;
+    frame.scrollLeft = from.left - (event.clientX - from.x);
+    frame.scrollTop = from.top - (event.clientY - from.y);
+  }
+
+  function release(event: PointerEvent) {
+    if (!dragging) return;
+    dragging = false;
+    (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
+  }
+
   // A drawing is hidden only when it *definitely* does not fit. "Unknown" is
   // always shown; see the note in `PartsPanel`.
   const filtering = $derived(browse.source !== undefined && browse.hideUnfit);
@@ -60,92 +94,100 @@
   const glyph = (verdict: string | undefined) =>
     verdict === "true" ? "✓" : verdict === "false" ? "✗" : "?";
 </script>
-
 <div class="flex min-h-0 min-w-0 flex-1 flex-col">
-  <div class="flex min-h-0 flex-1">
-    {#if shown.length > 1}
-      <div class="flex w-48 shrink-0 flex-col border-r border-divider">
-        <header
-          class="flex shrink-0 items-baseline gap-1 border-b border-divider px-2 py-1
-                 text-[10px] uppercase tracking-wide text-faint"
-        >
-          <span>{t("drawing.variants", { count: browse.drawings.length })}</span>
-          {#if shown.length !== browse.drawings.length}
-            <span class="font-mono normal-case tabular-nums">
-              {t("drawing.variantsOf", { shown: shown.length, total: browse.drawings.length })}
-            </span>
-          {/if}
-        </header>
-        <div class="min-h-0 flex-1 overflow-y-auto">
-          {#each shown as drawing (drawingKey(drawing))}
-            {@const verdict = browse.fit.get(drawingKey(drawing))}
-            <button
-              class="w-full border-b border-rule px-2 py-1.5 text-left transition-colors
-                     hover:bg-elevated {browse.drawing === drawing ? 'bg-elevated' : ''}"
-              onclick={() => showDrawing(drawing)}
-            >
-              <div
-                class="truncate text-xs {browse.drawing === drawing
-                  ? 'text-accent'
-                  : 'text-muted'}"
-              >
-                {drawing.name ?? drawing.table}
-              </div>
-              <div class="truncate font-mono text-[10px] text-faint">
-                {drawing.table} · v{drawing.variant}
-              </div>
-              {#if drawing.pattern}
-                <div
-                  class="truncate font-mono text-[10px] {browse.source
-                    ? mark(verdict)
-                    : 'text-warn'}"
-                  title={browse.source
-                    ? `${verdictLabel(verdict)} — ${drawing.pattern}`
-                    : drawing.pattern}
-                >
-                  {#if browse.source}{glyph(verdict)}
-                  {/if}{drawing.pattern}
-                </div>
-              {/if}
-            </button>
-          {/each}
-        </div>
-      </div>
-    {/if}
+  <!--
+    The variants as tabs across the top, not a column down the side.
 
+    A subgroup can hold several `DRAWINGS` rows for the same table, each a
+    different applicability, and choosing between them is part of reading the
+    drawing. As a list it cost twelve rems of width permanently — for three or
+    four entries — and that width belongs to the diagram.
+
+    The strip **wraps**; it does not scroll. A cropped tab is a drawing you
+    cannot see the name of and might not know is there, and these names run
+    long — `ENGINE INLET SCREW ANCHOR AND TIE RODS` — so they get two lines and
+    a fixed width, which also keeps the rows tidy instead of ragged.
+
+    The name **and** the variant, because the name alone is not enough and that
+    is the common case: a subgroup's five rows are routinely all called
+    `SEMI-COMPLETE ENGINE`, differing only in which engine they apply to.
+  -->
+  {#if shown.length > 1}
     <div
-      class="relative flex min-h-0 min-w-0 flex-1 overflow-auto p-3 {actual
+      class="flex shrink-0 flex-wrap items-stretch gap-px border-b border-divider bg-surface"
+      role="tablist"
+      aria-label={t("drawing.variants", { count: browse.drawings.length })}
+    >
+      {#each shown as drawing (drawingKey(drawing))}
+        {@const verdict = browse.fit.get(drawingKey(drawing))}
+        {@const current = browse.drawing === drawing}
+        <button
+          class="flex w-[13.5rem] shrink-0 items-start gap-1.5 border-b-2 px-2 py-1 text-left
+                 text-[11px] leading-snug transition-colors hover:bg-elevated {current
+            ? 'border-accent bg-elevated font-medium text-accent'
+            : 'border-transparent text-muted'}"
+          role="tab"
+          aria-selected={current}
+          onclick={() => showDrawing(drawing)}
+          title={[
+            drawing.name ?? drawing.table,
+            `${drawing.table} · v${drawing.variant}`,
+            drawing.pattern ?? "",
+            browse.source && drawing.pattern ? verdictLabel(verdict) : "",
+          ]
+            .filter(Boolean)
+            .join(" — ")}
+        >
+          {#if browse.source && drawing.pattern}
+            <span class="shrink-0 {mark(verdict)}">{glyph(verdict)}</span>
+          {/if}
+          <span class="line-clamp-2 min-w-0 flex-1">{drawing.name ?? drawing.table}</span>
+          <span class="shrink-0 font-mono text-[10px] {current ? 'text-accent' : 'text-faint'}">
+            v{drawing.variant}
+          </span>
+        </button>
+      {/each}
+      {#if shown.length !== browse.drawings.length}
+        <span
+          class="flex shrink-0 items-center px-2 font-mono text-[10px] tabular-nums text-faint"
+          title={t("strip.filterTitle")}
+        >
+          {t("drawing.variantsOf", { shown: shown.length, total: browse.drawings.length })}
+        </span>
+      {/if}
+    </div>
+  {/if}
+
+  <!--
+    A frame that does not move, holding a viewport that does.
+
+    The two buttons used to live *inside* the scroller, so panning a zoomed
+    drawing carried them off the screen with it. They belong to the frame, not
+    to the paper.
+  -->
+  <div class="relative flex min-h-0 min-w-0 flex-1">
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+      bind:this={frame}
+      class="flex min-h-0 min-w-0 flex-1 overflow-auto p-3 {actual
         ? 'items-start justify-start'
-        : 'items-center justify-center'}"
+        : 'items-center justify-center'} {actual
+        ? dragging
+          ? 'cursor-grabbing select-none'
+          : 'cursor-grab'
+        : ''}"
+      onpointerdown={grab}
+      onpointermove={drag}
+      onpointerup={release}
+      onpointercancel={release}
     >
       {#if browse.imageUrl}
-        <!--
-          The two buttons sit on the drawing rather than in a toolbar, because
-          they act on it and there is nowhere else they would obviously belong.
-        -->
-        <div class="absolute right-3 top-3 z-10 flex gap-1">
-          <button
-            class="rounded border border-divider bg-surface/90 p-1 text-muted backdrop-blur
-                   transition-colors hover:bg-elevated hover:text-foreground"
-            onclick={copyDrawing}
-            title={copied ? t("drawing.copied") : t("drawing.copy")}
-            aria-label={t("drawing.copy")}
-          >
-            {#if copied}<Check size={13} />{:else}<Copy size={13} />{/if}
-          </button>
-          <button
-            class="rounded border border-divider bg-surface/90 p-1 text-muted backdrop-blur
-                   transition-colors hover:bg-elevated hover:text-foreground"
-            onclick={() => (actual = !actual)}
-            title={actual ? t("drawing.shrink") : t("drawing.expand")}
-            aria-label={actual ? t("drawing.shrink") : t("drawing.expand")}
-          >
-            {#if actual}<Minimize2 size={13} />{:else}<Maximize2 size={13} />{/if}
-          </button>
-        </div>
+        <!-- `draggable=false`: otherwise the browser starts its own image drag
+             and the pan never begins. -->
         <img
           src={browse.imageUrl}
           alt={browse.drawing?.name ?? "drawing"}
+          draggable="false"
           class={actual ? "max-w-none" : "max-h-full max-w-full object-contain"}
         />
       {:else if browse.drawing}
@@ -154,6 +196,32 @@
         <p class="text-xs text-faint">{t("drawing.pickSubgroup")}</p>
       {/if}
     </div>
+
+    {#if browse.imageUrl}
+      <!-- `pointer-events-none` on the strip and `auto` on the buttons, so the
+           gap between them still belongs to the scroller underneath and can be
+           dragged. -->
+      <div class="pointer-events-none absolute right-3 top-3 z-10 flex gap-1">
+        <button
+          class="pointer-events-auto rounded border border-divider bg-surface/90 p-1 text-muted
+                 backdrop-blur transition-colors hover:bg-elevated hover:text-foreground"
+          onclick={copyDrawing}
+          title={copied ? t("drawing.copied") : t("drawing.copy")}
+          aria-label={t("drawing.copy")}
+        >
+          {#if copied}<Check size={13} />{:else}<Copy size={13} />{/if}
+        </button>
+        <button
+          class="pointer-events-auto rounded border border-divider bg-surface/90 p-1 text-muted
+                 backdrop-blur transition-colors hover:bg-elevated hover:text-foreground"
+          onclick={() => (actual = !actual)}
+          title={actual ? t("drawing.shrink") : t("drawing.expand")}
+          aria-label={actual ? t("drawing.shrink") : t("drawing.expand")}
+        >
+          {#if actual}<Minimize2 size={13} />{:else}<Maximize2 size={13} />{/if}
+        </button>
+      </div>
+    {/if}
   </div>
 
   {#if browse.drawing}
@@ -178,7 +246,10 @@
         <span class="font-mono {browse.source ? mark(verdict) : 'text-warn'}">
           {#if browse.source}{glyph(verdict)} {/if}{browse.drawing.pattern}
         </span>
-        <span class="min-w-0 flex-1 truncate text-faint" title={explainPattern(browse.drawing.pattern)}>
+        <span
+          class="min-w-0 flex-1 truncate text-faint"
+          title={explainPattern(browse.drawing.pattern)}
+        >
           {explainPattern(browse.drawing.pattern)}
         </span>
       {/if}

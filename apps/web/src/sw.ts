@@ -71,7 +71,17 @@ sw.addEventListener("install", (event) => {
   event.waitUntil(
     (async () => {
       const cache = await caches.open(CACHE);
-      await cache.addAll([...SHELL]);
+      /*
+       * `cache: "reload"`, so the browser's own HTTP cache cannot hand the
+       * worker a stale copy of a stable-named file — `index.html` above all,
+       * which is the one URL that does not carry a content hash.
+       */
+      await Promise.all(
+        [...SHELL].map(async (url) => {
+          const response = await fetch(url, { cache: "reload" });
+          if (response.ok) await cache.put(url, response);
+        }),
+      );
       // Take over straight away: a page that registered the worker must not
       // have to reload before its own fetches are intercepted. There is no
       // half-updated state to protect — the shell holds no data, and a tree is
@@ -128,9 +138,6 @@ sw.addEventListener("message", (event) => {
  * mistake.
  */
 
-/** Bumped by the build, so a new release replaces the shell wholesale. */
-const CACHE = `eperx-shell-${__APP_VERSION__}`;
-
 /**
  * The shell, as absolute URLs — which is what `cache.match` compares against.
  *
@@ -138,9 +145,35 @@ const CACHE = `eperx-shell-${__APP_VERSION__}`;
  * negotiable: the plugin scans the source for that literal and refuses the
  * build without it.
  */
-const SHELL = new Set(
-  self.__WB_MANIFEST.map((entry) => new URL(entry.url, self.location.href).href),
-);
+const MANIFEST = self.__WB_MANIFEST;
+const SHELL = new Set(MANIFEST.map((entry) => new URL(entry.url, self.location.href).href));
+
+/**
+ * The cache name, keyed to *this build* and not to the version.
+ *
+ * It used to be `eperx-shell-${__APP_VERSION__}`, and that version has not
+ * changed since the first commit — so every build reused one cache, `activate`
+ * never swept anything, and entries from old builds accumulated in it forever.
+ *
+ * The manifest is the build's identity: hashed asset names plus revisions,
+ * which differ whenever anything shipped differs. Hashing it means the name
+ * looks after itself, with no build-time variable to remember to bump.
+ */
+const BUILD = (() => {
+  const source = MANIFEST.map((entry) => `${entry.url}@${entry.revision ?? ""}`)
+    .sort()
+    .join("|");
+  // FNV-1a: four lines, no dependency, and collisions do not matter here —
+  // the worst a clash could do is reuse a cache that holds the same files.
+  let hash = 0x811c9dc5;
+  for (let at = 0; at < source.length; at++) {
+    hash ^= source.charCodeAt(at);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(36);
+})();
+
+const CACHE = `eperx-shell-${__APP_VERSION__}-${BUILD}`;
 
 const INDEX = new URL("index.html", sw.registration.scope).href;
 
