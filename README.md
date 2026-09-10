@@ -348,6 +348,12 @@ an ASP.NET reimplementation against release 84, and it got there first on the
 schema and on the F3 chassis format. It is MIT licensed, so eperx uses its
 knowledge and its layout documentation with attribution.
 
+## Support
+
+If you find this project useful, consider [buying me a coffee](https://buymeacoffee.com/emdzej) ☕ or [sponsoring on GitHub](https://github.com/sponsors/emdzej) or if it's your thing: via PayPal
+
+[![Donate with PayPal](https://www.paypalobjects.com/en_US/PL/i/btn/btn_donateCC_LG.gif)](https://www.paypal.com/donate/?business=TDBR3A97PLQRQ&no_recurring=0&item_name=%28emdzej%29&currency_code=PLN)
+
 ## Licence
 
 **PolyForm Noncommercial 1.0.0** — see [`LICENSE.md`](LICENSE.md).
