@@ -1,6 +1,6 @@
 {
   "name": "@eperx/cli",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "ePER disc tooling: inspect the databases, build a static tree the browser can read",
   "license": "PolyForm-Noncommercial-1.0.0",

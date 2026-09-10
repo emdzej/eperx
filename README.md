@@ -176,6 +176,7 @@ must not look like an answer. What is still open is listed in
   the convert-or-not decision per data type, phase order, ranked risks.
 - [`AGENTS.md`](AGENTS.md) — conventions for changing the code, and the
   mistakes that motivated them.
+- [`CHANGELOG.md`](CHANGELOG.md) — what changed, and why.
 
 ## Running it
 

@@ -1,6 +1,6 @@
 {
   "name": "@eperx/ktd",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Reader for ePER's F3 (KTD) chassis and vehicle files",
   "license": "PolyForm-Noncommercial-1.0.0",

@@ -1,6 +1,6 @@
 {
   "name": "@eperx/web",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Browser client for eperx — the ePER parts catalogue, client-side",
   "license": "PolyForm-Noncommercial-1.0.0",

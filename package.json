@@ -1,7 +1,7 @@
 {
   "name": "eperx",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Browser-based Fiat group parts catalogue — a client-side reimplementation of ePER",
   "license": "PolyForm-Noncommercial-1.0.0",
   "repository": {
