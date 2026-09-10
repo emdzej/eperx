@@ -128,6 +128,14 @@ colleague sets their source up rather than working once.
 
 ### Fixed
 
+- **A subgroup could open a drawing the vehicle cannot have.** Selecting one
+  showed `drawings[0]` rather than the first the filter would show, so subgroup
+  6 of a 1.2 petrol opened `10106-010 v1` — a 1.3 JTD variant marked "does not
+  fit" — with its diesel parts listed beneath and no tab selected, because the
+  tabs correctly offered only the two fitting variants of eight. The rule now
+  lives in one place and everything that picks a drawing uses it; the drawing
+  on screen also always keeps its tab, so a where-used jump to an excluded
+  variant is legible rather than silent.
 - **A folder-mounted tree could report `SQLITE_CORRUPT`.** The worker held its
   mount in memory, and a service worker's memory does not last — the browser
   restarts it whenever it likes, and a new version claims the page on activation.

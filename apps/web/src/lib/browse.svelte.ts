@@ -95,6 +95,39 @@ export const browse = $state({
  */
 let restoring = false;
 
+/**
+ * Would the filter hide this verdict?
+ *
+ * The one rule, in one place, because three components ask it and a drawing
+ * chosen by a different rule than the one that lists them is how a drawing
+ * came to be shown with no tab selected — see {@link firstVisible}.
+ *
+ * Only a **definite** non-fit is hidden. "Not determined" is always shown:
+ * declining to answer must not look like an answer, and hiding on uncertainty
+ * would quietly lose real parts.
+ */
+export function hiddenByFilter(verdict: string | undefined): boolean {
+  return browse.source !== undefined && browse.hideUnfit && verdict === "false";
+}
+
+/**
+ * The drawing to open when a subgroup is chosen.
+ *
+ * The first one the filter would *show*, not the first in the list. Those are
+ * different things and the difference was a real fault: subgroup 6 of a 1.2
+ * petrol opened `10106-010 v1`, a 1.3 JTD variant marked "does not fit", with
+ * its diesel parts listed beneath and no tab selected — because the tabs
+ * correctly offered only the two fitting variants of eight.
+ *
+ * Falls back to the first of all when every one is excluded, so a subgroup
+ * still shows something and the footer's verdict says what it is. Showing
+ * nothing would read as missing data rather than as a vehicle that has none of
+ * these parts.
+ */
+export function firstVisible(list: Drawing[]): Drawing | undefined {
+  return list.find((d) => !hiddenByFilter(browse.fit.get(drawingKey(d)))) ?? list[0];
+}
+
 /** Hide or show definite non-fits, and remember which. */
 export function setHideUnfit(value: boolean): void {
   browse.hideUnfit = value;
@@ -264,7 +297,7 @@ export async function selectSubgroup(subgroup: Subgroup): Promise<void> {
       subgroup.code,
     );
     scoreDrawings();
-    const first = browse.drawings[0];
+    const first = firstVisible(browse.drawings);
     if (first) await showDrawing(first);
   });
 }
@@ -428,10 +461,8 @@ export async function applyVin(): Promise<void> {
     scoreDrawings();
     scoreCallouts();
     if (browse.drawing && browse.fit.get(drawingKey(browse.drawing)) === Truth.False) {
-      const replacement = browse.drawings.find(
-        (candidate) => browse.fit.get(drawingKey(candidate)) !== Truth.False,
-      );
-      if (replacement) await showDrawing(replacement);
+      const replacement = firstVisible(browse.drawings);
+      if (replacement && replacement !== browse.drawing) await showDrawing(replacement);
     }
     remember();
   });
@@ -475,10 +506,8 @@ export async function selectVersion(version: Version | undefined): Promise<void>
     // there shows a diagram flagged "does not fit" beside a variant list that
     // no longer offers it, which reads as a bug and is one.
     if (browse.drawing && browse.fit.get(drawingKey(browse.drawing)) === Truth.False) {
-      const replacement = browse.drawings.find(
-        (candidate) => browse.fit.get(drawingKey(candidate)) !== Truth.False,
-      );
-      if (replacement) await showDrawing(replacement);
+      const replacement = firstVisible(browse.drawings);
+      if (replacement && replacement !== browse.drawing) await showDrawing(replacement);
     }
     remember();
   });

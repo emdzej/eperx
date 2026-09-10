@@ -16,7 +16,7 @@
   import Copy from "@lucide/svelte/icons/copy";
   import ShoppingCart from "@lucide/svelte/icons/shopping-cart";
   import StickyNote from "@lucide/svelte/icons/sticky-note";
-  import { browse, calloutKey, explainPattern } from "../lib/browse.svelte";
+  import { browse, calloutKey, explainPattern, hiddenByFilter } from "../lib/browse.svelte";
   import { bin } from "../lib/bin.svelte";
   import { copyText } from "../lib/clipboard";
   import { i18n } from "../lib/i18n/index.svelte";
@@ -59,18 +59,10 @@
     });
   }
 
-  /**
-   * Filtering, and its one rule.
-   *
-   * A callout is hidden only when it **definitely** does not fit. "Unknown" is
-   * always shown: declining to answer must not look like an answer, and hiding
-   * on uncertainty would quietly lose real parts.
-   */
-  const filtering = $derived(browse.source !== undefined && browse.hideUnfit);
+  // `hiddenByFilter` is the shared rule: only a definite non-fit is hidden,
+  // because declining to answer must not look like an answer.
   const shown = $derived(
-    filtering
-      ? browse.callouts.filter((c) => browse.calloutFit.get(calloutKey(c)) !== "false")
-      : browse.callouts,
+    browse.callouts.filter((c) => !hiddenByFilter(browse.calloutFit.get(calloutKey(c)))),
   );
   const hiddenCount = $derived(browse.callouts.length - shown.length);
 

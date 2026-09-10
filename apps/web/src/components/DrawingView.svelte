@@ -13,7 +13,13 @@
   import Copy from "@lucide/svelte/icons/copy";
   import Maximize2 from "@lucide/svelte/icons/maximize-2";
   import Minimize2 from "@lucide/svelte/icons/minimize-2";
-  import { browse, drawingKey, explainPattern, showDrawing } from "../lib/browse.svelte";
+  import {
+    browse,
+    drawingKey,
+    explainPattern,
+    hiddenByFilter,
+    showDrawing,
+  } from "../lib/browse.svelte";
   import { blobFromUrl, copyImage } from "../lib/clipboard";
   import { i18n } from "../lib/i18n/index.svelte";
 
@@ -74,13 +80,20 @@
     (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
   }
 
-  // A drawing is hidden only when it *definitely* does not fit. "Unknown" is
-  // always shown; see the note in `PartsPanel`.
-  const filtering = $derived(browse.source !== undefined && browse.hideUnfit);
+  /**
+   * The variants to offer, which always includes the one on screen.
+   *
+   * `hiddenByFilter` is the shared rule — only a definite non-fit is hidden.
+   * The exception is the drawing currently displayed: it can be one the filter
+   * would exclude, because a where-used jump lands on a specific drawing and
+   * that is an explicit request. Leaving it out of the strip was how a diagram
+   * came to be shown with no tab selected and nothing to say why, so it keeps
+   * its tab and its `✗`.
+   */
   const shown = $derived(
-    filtering
-      ? browse.drawings.filter((d) => browse.fit.get(drawingKey(d)) !== "false")
-      : browse.drawings,
+    browse.drawings.filter(
+      (d) => d === browse.drawing || !hiddenByFilter(browse.fit.get(drawingKey(d))),
+    ),
   );
 
   const mark = (verdict: string | undefined) =>
