@@ -17,7 +17,8 @@
   let {
     onClose,
     firstRun = false,
-  }: { onClose: () => void; firstRun?: boolean } = $props();
+    reason,
+  }: { onClose: () => void; firstRun?: boolean; reason?: string } = $props();
 
   type Tab = "data" | "interface";
   let tab = $state<Tab>("data");
@@ -103,7 +104,7 @@
       {#if tab === "interface"}
         <InterfaceSettings />
       {:else if tab === "data"}
-        <DataSettings onOpened={onClose} />
+        <DataSettings onOpened={onClose} {reason} />
       {/if}
     </div>
   </div>

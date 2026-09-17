@@ -3,7 +3,7 @@ import { languages, type Language } from "@eperx/catalogue";
 import { createSQLiteHTTPPool, type SQLiteHTTPPool } from "sqlite-wasm-http";
 import type { CsFileSystem } from "@emdzej/csfs-core";
 import { dataFileSystem } from "./filesystem";
-import { verifyTree, type MountKind } from "./mount";
+import { rangeUnsupported, verifyTree, type MountKind } from "./mount";
 
 /**
  * The connection to an imported tree.
@@ -124,6 +124,19 @@ export async function connect(
     tree.kind = options.kind ?? "remote";
     tree.fs = await dataFileSystem(tree.kind, { base: tree.base, handle: options.handle });
     const language = options.language;
+
+    // Asked here, before SQLite is pointed at the file, because a host that
+    // ignores `Range` fails in two unrelated places and neither says so. This
+    // one sentence replaces whichever of the two the reader would have hit
+    // first: an sqlite-wasm-http open that decodes a whole-file body as page 1,
+    // or csfs refusing the read outright under `ranges: "require"`.
+    if (tree.kind === "remote" && (await rangeUnsupported(tree.base))) {
+      throw new Error(
+        `${tree.base} answered a ranged request with the whole file. eperx reads a ` +
+          `6.5 GB tree a few kilobytes at a time, so the host has to support ` +
+          `Range — try \`eperx serve\`, or enable it on the host.`,
+      );
+    }
 
     // `sync` is chosen deliberately, not fallen back into. The shared-cache
     // backend needs `SharedArrayBuffer`, which needs

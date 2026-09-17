@@ -1,6 +1,6 @@
 {
   "name": "@eperx/web",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "Browser client for eperx — the ePER parts catalogue, client-side",
   "license": "PolyForm-Noncommercial-1.0.0",
@@ -12,10 +12,10 @@
     "typecheck": "svelte-check --tsconfig ./tsconfig.json"
   },
   "dependencies": {
-    "@emdzej/csfs-core": "^0.1.1",
-    "@emdzej/csfs-fsa": "^0.1.1",
-    "@emdzej/csfs-http": "^0.1.1",
-    "@emdzej/csfs-opfs": "^0.1.1",
+    "@emdzej/csfs-core": "^0.2.0",
+    "@emdzej/csfs-fsa": "^0.2.0",
+    "@emdzej/csfs-http": "^0.2.0",
+    "@emdzej/csfs-opfs": "^0.2.0",
     "@eperx/catalogue": "workspace:*",
     "@eperx/core": "workspace:*",
     "@eperx/importer": "workspace:*",

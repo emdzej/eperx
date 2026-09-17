@@ -32,7 +32,24 @@ export async function dataFileSystem(
 ): Promise<CsFileSystem> {
   if (kind === "remote") {
     const base = options.base ?? "/data";
-    return httpFileSystem(base.replace(/\/$/, ""));
+    // `ranges: "require"` rather than csfs 0.2.0's new `"auto"` default, which
+    // reads the whole file and slices it locally once a host has shown it
+    // ignores `Range`. That is the right default for a library and the wrong
+    // one here, for two reasons.
+    //
+    // It cannot rescue eperx anyway: `catalogue.sqlite` is read by
+    // `sqlite-wasm-http`, which needs real `206`s and has no fallback. So on
+    // such a host SQL fails whatever csfs does, and the tree is unreadable.
+    //
+    // And the fallback is not cheap at this file size. Measured against a
+    // served tree, one 53 kB drawing out of a 19.6 MB shard: **0.1 MB over five
+    // ranged requests, against 78.4 MB without** — the same five reads, four of
+    // them pulling the whole shard, because a 19.6 MB body does not fit the
+    // 16 MiB whole-file cache. Failing on connect is the kinder answer.
+    //
+    // It costs nothing when the host is fine: `"require"` and `"auto"` make the
+    // identical five requests against a host that honours `Range`.
+    return httpFileSystem(base.replace(/\/$/, ""), { ranges: "require" });
   }
 
   if (kind === "directory") {

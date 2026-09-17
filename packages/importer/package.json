@@ -1,6 +1,6 @@
 {
   "name": "@eperx/importer",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "Turns an ePER disc into a tree a browser can read, in Node or in the browser",
   "license": "PolyForm-Noncommercial-1.0.0",
@@ -19,7 +19,7 @@
     "clean": "rm -rf dist .turbo *.tsbuildinfo"
   },
   "dependencies": {
-    "@emdzej/csfs-core": "^0.1.1",
+    "@emdzej/csfs-core": "^0.2.0",
     "@eperx/core": "workspace:*",
     "@eperx/res": "workspace:*",
     "mdb-reader": "^3.2.0"

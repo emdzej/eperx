@@ -423,19 +423,33 @@ backend needs a manifest**: a static host cannot list a directory, so
 without one. It is small because the shards stay packed — 267 entries and 9 kB
 for 6.52 GB, against the 14.72 MB an extracted tree would need.
 
+**One csfs default is overridden, deliberately: `ranges: "require"`.** From
+0.2.0 the HTTP backend's default is `"auto"`, which reads the whole file and
+slices it locally once a host has shown it ignores `Range`. Right for a library,
+wrong for eperx, and if you relax it the app gets slower rather than broken —
+which is the harder kind of regression to notice. Two reasons, both in
+`apps/web/src/lib/filesystem.ts`: it cannot rescue the tree anyway, because
+`sqlite-wasm-http` needs a real `206` and has no fallback; and one 53 kB drawing
+out of a 19.6 MB shard costs 0.1 MB ranged against **78.4 MB** unranged, since a
+19.6 MB body does not fit the 16 MiB whole-file cache. `tree.svelte.ts` probes
+for such a host on connecting so the failure is one sentence rather than two
+mysteries.
+
 ## The importer has two homes, and neither owns the filesystem
 
 `@eperx/importer` holds every piece of format knowledge and none of the I/O. It
-talks to a `SourceFs`/`TargetFs` and a small `SqlWriter`; `apps/cli/src/node-fs.ts`
-and `apps/web/src/lib/browser-fs.ts` supply one implementation each. Add
-format knowledge to the package, never to either adapter — the whole point is
-that there is one copy of it.
+takes a `CsFileSystem` and a small `SqlWriter`, and each app supplies those:
+`apps/cli/src/index.ts` passes `nodeFileSystem()` and
+`apps/cli/src/sql-writer.ts`, `apps/web/src/lib/import.worker.ts` passes
+`fsaFileSystem()`/`opfsFileSystem()` and `apps/web/src/lib/sql-writer.ts`. Add
+format knowledge to the package, never to a caller — the whole point is that
+there is one copy of it.
 
 Every path the importer sees is **relative and `/`-separated**, rooted at the
 disc or at the tree. It never sees an absolute path, because a browser has none
-to give: a folder the user picked is a handle, not a location. `SourceFile`
-carries an optional `nativePath` as the one escape hatch, and `--link` is its
-only caller.
+to give: a folder the user picked is a handle, not a location. The one escape
+hatch is `NodeFileSystem.rootPath`, and `--link` is its only caller — which is
+also why `--link` is a CLI-only flag.
 
 Three things about it are easy to get wrong:
 
@@ -443,12 +457,13 @@ Three things about it are easy to get wrong:
   into the same file afterwards, and `ANALYZE` and `VACUUM` both have to come
   last or they miss the `images` table. That is `finaliseDatabase`, then
   `writer.finish()`.
-- **`SourceFile.bytes()` returns a `JetBuffer`, not a `Uint8Array`.**
+- **`convertDatabase` takes a `JetBuffer`, not a `Uint8Array`.**
   mdb-reader reads Jet's pages with `readUInt32LE` and friends, which a plain
-  `Uint8Array` does not have — so raw bytes from a `File` type-check happily
+  `Uint8Array` does not have — so raw bytes from a `CsFile` type-check happily
   and then die on the first page. The type names those methods so it fails at
-  the call site instead. Node's `Buffer` satisfies it for free; the browser
-  wraps with `Buffer.from`, which is a view and copies nothing.
+  the call site instead. Since `CsFile.bytes()` returns a plain `Uint8Array`,
+  **both** callers now wrap: `Buffer.from(await file.arrayBuffer())`, which is a
+  view and copies nothing. Node's `Buffer` satisfies the type for free.
 - **`node-shim.ts` must be imported first, and supplies `process` as well as
   `Buffer`.** Both are read while mdb-reader's module graph is _evaluated_, not
   when it is called, so assigning them from the worker's own body is too late.
@@ -461,7 +476,7 @@ Three things about it are easy to get wrong:
 
 `showDirectoryPicker` needs a user gesture, which would leave the entire
 in-browser import unverifiable. The way round it is that **OPFS directories are
-`FileSystemDirectoryHandle`s too**, and that is the only thing `BrowserSourceFs`
+`FileSystemDirectoryHandle`s too**, and that is the only thing `fsaFileSystem()`
 asks for. So `apps/web/harness/` stages a disc into OPFS over HTTP and points
 the real worker at it; everything below the picker is the shipping code.
 

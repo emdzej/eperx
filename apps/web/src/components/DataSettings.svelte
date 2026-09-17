@@ -27,7 +27,16 @@
   import { connect, disconnect, tree } from "../lib/tree.svelte";
   import ImportWizard from "./ImportWizard.svelte";
 
-  let { onOpened }: { onOpened?: () => void } = $props();
+  /**
+   * `reason` is why the tree that was supposed to open did not.
+   *
+   * It arrives as a prop rather than being read from `tree.error` because this
+   * panel opens *over* the screen that would otherwise show it, so without it
+   * the explanation is behind the dialog that exists to act on it. Shown in the
+   * same box as this panel's own failures: from here they are the same kind of
+   * thing, and what to do about them is on this screen either way.
+   */
+  let { onOpened, reason }: { onOpened?: () => void; reason?: string } = $props();
 
   let base = $state("http://127.0.0.1:8998");
   let can = $state<Capabilities | undefined>(undefined);
@@ -202,9 +211,9 @@
 </script>
 
 <div class="space-y-4">
-  {#if error}
+  {#if error || reason}
     <div class="rounded border border-danger/40 bg-danger/10 px-3 py-2 text-xs text-danger">
-      {error}
+      {error ?? reason}
     </div>
   {/if}
 

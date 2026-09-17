@@ -115,8 +115,8 @@ Full reasoning in [`docs/plan.md`](docs/plan.md).
 The import runs in a tab as well as in Node, because none of it is really about
 Node: which files a disc carries, which columns earn an index, that a `.res`
 shard is a ZIP of stored entries. `@eperx/importer` holds all of that and talks
-to a `SourceFs`/`TargetFs` and a small `SqlWriter`; `apps/cli` and `apps/web`
-supply one implementation each.
+to a [csfs](https://github.com/emdzej/csfs) filesystem and a small `SqlWriter`;
+`apps/cli` and `apps/web` supply one of each.
 
 Two measurements decide whether this is reasonable, and both were taken before
 it was built. `mdb-reader` parses `SP.DB` as a **view** over the buffer rather

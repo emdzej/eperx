@@ -112,7 +112,8 @@ address.
 Any static host will do, not just `eperx serve` — it only has to honour
 `Range`. A host that ignores it is **rejected** rather than trusted, because
 its answer to "give me these 4 kB" is the whole 568 MB file, and using that as
-a slice returns the wrong bytes silently.
+a slice returns the wrong bytes silently. eperx checks on connecting and says
+so, rather than letting you find out one drawing at a time.
 
 ### C. Import with the CLI, and open the folder
 

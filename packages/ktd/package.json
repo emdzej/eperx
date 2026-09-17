@@ -1,6 +1,6 @@
 {
   "name": "@eperx/ktd",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "Reader for ePER's F3 (KTD) chassis and vehicle files",
   "license": "PolyForm-Noncommercial-1.0.0",
@@ -19,7 +19,7 @@
     "clean": "rm -rf dist .turbo *.tsbuildinfo"
   },
   "dependencies": {
-    "@emdzej/csfs-core": "^0.1.1",
+    "@emdzej/csfs-core": "^0.2.0",
     "@eperx/core": "workspace:*",
     "bz2": "^1.0.1"
   },

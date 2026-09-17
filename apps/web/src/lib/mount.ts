@@ -231,6 +231,38 @@ export async function hasManifest(base: string): Promise<boolean> {
 }
 
 /**
+ * Does this host answer a `Range` request with the bytes asked for?
+ *
+ * Asked once, before the catalogue is opened, because everything above this
+ * assumes ranged reads and nothing degrades gracefully without them.
+ * `sqlite-wasm-http` needs a real `206` and has no fallback; csfs is pinned to
+ * `ranges: "require"` for the same reason, and `filesystem.ts` records what its
+ * fallback would otherwise cost at 19.6 MB a shard. So this is worth one small
+ * request to be able to say which of the two things is wrong.
+ *
+ * Probed on `manifest.json` rather than on the database, because a host that
+ * ignores the header answers with the whole file — 523 bytes here against
+ * 568 MB there.
+ *
+ * Which is also why the body is read rather than cancelled: at this size it is
+ * free, and a cancelled body is an `ERR_ABORTED` in the network panel, which
+ * looks exactly like the kind of fault someone would open the panel to find.
+ */
+export async function rangeUnsupported(base: string): Promise<boolean> {
+  try {
+    const response = await fetch(`${base}/manifest.json`, { headers: { Range: "bytes=0-0" } });
+    await response.arrayBuffer().catch(() => undefined);
+    // Only a 200 is evidence of *this* fault. Anything else — a 404, a 403, a
+    // tree with no manifest — is a different problem, and the reads that follow
+    // report it better than a guess from here would.
+    return response.status === 200;
+  } catch {
+    // Offline, blocked by CORS, no such host: also not this question.
+    return false;
+  }
+}
+
+/**
  * Check that the files the manifest promises can actually be read.
  *
  * This exists because of one specific, silent failure. `eperx import --link`
@@ -248,6 +280,8 @@ export async function hasManifest(base: string): Promise<boolean> {
  */
 export async function verifyTree(base: string, kind: MountKind): Promise<string | undefined> {
   // A remote host serves whatever its filesystem resolves, links included.
+  // Whether it honours `Range` is checked before the catalogue is opened
+  // rather than here — see `rangeUnsupported`.
   if (kind === "remote") return undefined;
 
   const manifest = await readManifest(base);

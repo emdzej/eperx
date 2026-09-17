@@ -308,6 +308,12 @@ program
     // Built from the tree rather than from what we just wrote, so it records
     // what is actually there — including, for a `--link` tree, the real sizes
     // behind the symlinks.
+    //
+    // That last part needs csfs 0.2.0. Before it, `readdir` does not follow a
+    // link, so a symlink was neither a file nor a directory to the walk and was
+    // dropped from every listing — which meant a `--link` tree's manifest
+    // described only `catalogue.sqlite` and friends, and the one mode `--link`
+    // exists for, serving over HTTP, had no drawings in it at all.
     const described = await buildCsfsManifest(targetFs, {
       label: `ePER ${disc.version} release ${disc.release}`,
       builtAt: manifest.importedAt,

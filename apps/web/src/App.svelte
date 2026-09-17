@@ -95,10 +95,12 @@
       }
       await saveSettings({ kind: "remote", base: url });
       await connect(base, { kind: "remote" });
-      if (tree.catalogue) {
-        await loadMakes();
-        await restoreSelection();
-      }
+      // `connect` keeps its own failure in `tree.error` rather than throwing,
+      // so a tree that does not open has to be turned back into one here or
+      // this screen shows nothing at all — which is what it used to do.
+      if (!tree.catalogue) throw new Error(tree.error ?? `${url} could not be opened`);
+      await loadMakes();
+      await restoreSelection();
       const clean = new URL(location.href);
       clean.searchParams.delete("data");
       history.replaceState(null, "", clean);
@@ -138,11 +140,11 @@
         throw new Error("the saved source no longer holds a catalogue");
       }
       await connect(base, { kind: resumable.settings.kind, handle: resumable.handle });
-      if (tree.catalogue) {
-        await loadMakes();
-        // Back to where they were, if this tree still has it.
-        await restoreSelection();
-      }
+      // As above: `connect` reports by setting `tree.error`, not by throwing.
+      if (!tree.catalogue) throw new Error(tree.error ?? "the saved source could not be opened");
+      await loadMakes();
+      // Back to where they were, if this tree still has it.
+      await restoreSelection();
     } catch (error) {
       resumeError = error instanceof Error ? error.message : String(error);
       settingsOpen = true;
@@ -334,6 +336,7 @@
   {#if settingsOpen}
     <SettingsDialog
       {firstRun}
+      reason={resumeError}
       onClose={() => {
         settingsOpen = false;
         firstRun = false;

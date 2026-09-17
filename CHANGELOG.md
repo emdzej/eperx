@@ -8,6 +8,78 @@ worth as much as its evidence — the reasoning behind each one is in
 Versions follow [semantic versioning](https://semver.org/). Before 1.0 a minor
 bump is where features land.
 
+## 0.2.1
+
+csfs 0.2.0: one bug of eperx's that it fixes, one new default eperx declines,
+and — found while testing that — a failure the app had never been able to report.
+
+### Fixed
+
+- **A `--link` tree served over HTTP had no drawings in it.** `--link` symlinks
+  the shards and chassis files rather than copying 5.7 GB, and serving such a
+  tree is the one thing it is for — a browser will not follow a link out of a
+  granted folder, so HTTP is the only mode left. But the manifest a served tree
+  carries is built by walking listings, and `readdir` does not follow a link, so
+  a symlink was neither a file nor a directory to the walk and was dropped.
+  Measured on a tree of one real file and two links: **the manifest described
+  the one real file**, while `file()` read both links perfectly well. So `import`
+  printed a cheerful entry count, the tree mounted, and then every drawing came
+  back absent — from the manifest, without the host ever being asked, which is
+  the one kind of missing file no server log would show.
+
+  Fixed in csfs 0.2.0, which classifies a link by its target. The same tree now
+  describes all three, with the real sizes behind the links — which is what the
+  comment above that code had claimed all along.
+
+- **A tree that would not open said nothing about why.** `connect` keeps its
+  failure in `tree.error` rather than throwing, and both paths that open a tree
+  on startup — `?data=` and the saved source — tested for the *absence* of a
+  catalogue and simply carried on. So any failure inside `connect` left the
+  opening screen offering "Choose a source" with no hint that anything had been
+  attempted, let alone what went wrong. Found while checking that the new `Range`
+  message actually reaches a reader: it did not.
+
+  Both paths now turn that into the error they already knew how to display, and
+  the reason is shown **inside** the settings panel rather than on the screen
+  behind it — the panel opens over that screen, so the explanation was covered by
+  the dialog that exists to act on it.
+
+### Changed
+
+- **The HTTP source insists on `Range` rather than working around its absence.**
+  csfs 0.2.0 reads the whole file and slices it locally when a host turns out to
+  ignore the header; eperx pins `ranges: "require"` instead, for two reasons.
+  It cannot help here — `catalogue.sqlite` is read by `sqlite-wasm-http`, which
+  needs a real `206` and has no fallback, so SQL fails whatever csfs does. And
+  it is expensive at this file size: one 53 kB drawing out of a 19.6 MB shard
+  costs **0.1 MB over five ranged requests, against 78.4 MB without**, because a
+  19.6 MB body does not fit the 16 MiB whole-file cache and four of the five
+  reads pull the shard entire. Measured both ways against a served tree.
+
+  On a host that honours `Range` the two settings make the identical five
+  requests, so this costs nothing in the normal case.
+
+### Added
+
+- **A host that ignores `Range` is now said out loud, on connecting.** One 523-byte
+  request for `manifest.json` with a `Range` header, before SQLite is pointed at
+  the database. Without it the fault surfaces twice and legibly neither time: as
+  an sqlite-wasm-http open that decodes a whole-file body as page 1, or as a csfs
+  refusal on the first drawing. The body is read rather than cancelled, because
+  at 523 bytes that is free and a cancelled body shows up as `ERR_ABORTED` in the
+  network panel — which looks like exactly the sort of fault someone opens that
+  panel to find.
+
+### Corrected
+
+- `AGENTS.md` and `README.md` still described the importer's seams as they were
+  before csfs: a `SourceFs`/`TargetFs` pair, `BrowserSourceFs`, a `nativePath`
+  escape hatch, and two adapter files — `apps/cli/src/node-fs.ts` and
+  `apps/web/src/lib/browser-fs.ts` — that 0.2.0 deleted. AGENTS.md contradicted
+  itself about `JetBuffer` in the process, having recorded the change correctly
+  a page earlier. A wrong filename in the file that tells an agent where to work
+  is worse than no filename.
+
 ## 0.2.0
 
 ### Reading bytes is csfs's job now
