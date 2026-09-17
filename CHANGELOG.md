@@ -8,7 +8,7 @@ worth as much as its evidence — the reasoning behind each one is in
 Versions follow [semantic versioning](https://semver.org/). Before 1.0 a minor
 bump is where features land.
 
-## 0.2.1
+## 0.3.0
 
 csfs 0.2.0: one bug of eperx's that it fixes, one new default eperx declines,
 and — found while testing that — a failure the app had never been able to report.
